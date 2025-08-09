@@ -1,0 +1,95 @@
+#include "avpjoin/utils/join_list.hpp"
+#include <iostream>
+
+JoinList::JoinList() : using_bin_search_(true) { lists_ = std::vector<std::span<uint>>(); }
+
+JoinList::JoinList(uint using_bin_search) : using_bin_search_(using_bin_search) {
+    lists_ = std::vector<std::span<uint>>();
+}
+
+JoinList::JoinList(std::vector<std::span<uint>> &lists) : using_bin_search_(true) { AddLists(lists); }
+
+void JoinList::AddList(const std::span<uint> &list) {
+    if (lists_.size() == 0 || list.size() == 0) {
+        lists_.push_back(list);
+        return;
+    }
+    uint first_val = list.operator[](0);
+    for (long unsigned int i = 0; i < lists_.size(); i++) {
+        if (lists_[i].size() > 0)
+            if (lists_[i][0] > first_val) {
+                lists_.insert(lists_.begin() + i, list);
+                return;
+            }
+    }
+
+    lists_.push_back(list);
+}
+
+void JoinList::AddLists(const std::vector<std::span<uint>> &lists) {
+    for (auto it = lists.begin(); it != lists.end(); it++) {
+        AddList(*it);
+    }
+}
+
+void JoinList::UpdateCurrentPostion() {
+    for (long unsigned int i = 0; i < lists_.size(); i++) {
+        list_current_pos_.push_back(lists_[i].begin());
+    }
+}
+
+void JoinList::Seek(int i, uint val) {
+
+    // using lower_bound
+    auto &list = lists_[i];
+    if (using_bin_search_) {
+        auto it = std::lower_bound(list.begin(), list.end(), val);
+        list_current_pos_[i] = it;
+    } else {
+        auto it = list_current_pos_[i];
+        auto end = list.end();
+        for (; it < end; it = it + 2) {
+            if (*it >= val) {
+                if (*(it - 1) >= val) {
+                    list_current_pos_[i] = it - 1;
+                    return;
+                }
+                list_current_pos_[i] = it;
+                return;
+            }
+        }
+        if (it == end) {
+            if (*(it - 1) >= val) {
+                list_current_pos_[i] = it - 1;
+                return;
+            }
+        }
+        list_current_pos_[i] = end;
+    }
+}
+
+uint JoinList::GetCurrentValOfList(int i) { return *list_current_pos_[i]; }
+
+void JoinList::NextVal(int i) { list_current_pos_[i]++; }
+
+std::span<uint> JoinList::GetListByIndex(int i) { return lists_[i]; }
+
+bool JoinList::HasEmpty() {
+    for (long unsigned int i = 0; i < lists_.size(); i++) {
+        if (lists_[i].size() == 0)
+            return true;
+    }
+    return false;
+}
+
+bool JoinList::AtEnd(int i) {
+    std::span<uint> p_r = lists_[i];
+    return list_current_pos_[i] == p_r.end();
+}
+
+void JoinList::Clear() {
+    lists_.clear();
+    list_current_pos_.clear();
+}
+
+int JoinList::Size() { return lists_.size(); }

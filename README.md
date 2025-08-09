@@ -1,0 +1,1 @@
+# AVPJoin: Adaptive Variable-wise Parallel Execution for Worst-Case Optimal Joins
