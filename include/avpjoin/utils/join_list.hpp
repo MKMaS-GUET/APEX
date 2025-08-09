@@ -27,26 +27,24 @@ class JoinList {
      */
     std::vector<std::span<uint>::iterator> list_current_pos_;
 
-    bool using_bin_search_;
+    bool using_bin_search_ = true;
 
-  public:
+   public:
     JoinList();
 
-    JoinList(uint using_bin_search);
-
-    JoinList(std::vector<std::span<uint>> &lists);
+    JoinList(std::vector<std::span<uint>>& lists);
 
     /**
      * @brief Adds a single list to the collection according to its first value.
      * @param list A span representing the list to be added.
      */
-    void AddList(const std::span<uint> &list);
+    void AddList(const std::span<uint>& list);
 
     /**
      * @brief Adds multiple lists to the collection.
      * @param lists A vector of spans representing the lists to be added.
      */
-    void AddLists(const std::vector<std::span<uint>> &lists);
+    void AddLists(const std::vector<std::span<uint>>& lists);
 
     /**
      * @brief Updates the current positions in list_current_pos_ of all lists in the collection.

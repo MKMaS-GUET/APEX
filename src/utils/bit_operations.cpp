@@ -3,38 +3,78 @@
 
 namespace bitop {
 
-One::One(MMap<char> &bits, uint begin, uint end) : bits_(bits), bit_offset_(begin), end_(end) {}
+One::One(MMap<char>& bits, uint begin, uint end) : bits_(bits), bit_offset_(begin), end_(end) {}
 
 // next one in [begin, end)
 uint One::Next() {
-    for (; bit_offset_ < end_; bit_offset_++) {
-        if (bits_[bit_offset_ / 8] != 0) {
-            if (bits_[bit_offset_ / 8] & 1 << (7 - bit_offset_ % 8)) {
-                bit_offset_++;
-                return bit_offset_ - 1;
-            }
-        } else {
-            bit_offset_ = bit_offset_ - bit_offset_ % 8 + 7;
+    while (bit_offset_ < end_) {
+        uint byte_index = bit_offset_ / 8;
+        uint bit_in_byte = bit_offset_ % 8;
+
+        // 如果当前字节为0，快速跳过连续的零字节
+        if (bits_[byte_index] == 0) {
+            uint next_non_zero = skip_zero_bytes(bits_, bit_offset_, end_ - 1);
+            bit_offset_ = next_non_zero;
+            continue;
         }
+
+        // 在非零字节中查找下一个1位
+        unsigned char byte_val = bits_[byte_index];
+        for (uint i = bit_in_byte; i < 8 && (byte_index * 8 + i) < end_; i++) {
+            if (byte_val & (1 << (7 - i))) {
+                uint result = byte_index * 8 + i;
+                bit_offset_ = result + 1;
+                return result;
+            }
+        }
+
+        // 跳到下一个字节的开始
+        bit_offset_ = (byte_index + 1) * 8;
     }
     return end_;
 }
 
 // ones in [begin, end]
-uint range_rank(MMap<char> &bits, uint begin, uint end) {
+uint range_rank(MMap<char>& bits, uint begin, uint end) {
     uint cnt = 0;
-    for (uint bit_offset = begin; bit_offset <= end; bit_offset++) {
-        if (bits[bit_offset / 8] != 0) {
-            if (bits[bit_offset / 8] & 1 << (7 - bit_offset % 8))
+    uint byte_begin = begin / 8;
+    uint byte_end = end / 8;
+
+    if (byte_begin == byte_end) {
+        // 同一字节内的情况
+        unsigned char byte_val = bits[byte_begin];
+        for (uint i = begin % 8; i <= end % 8; i++) {
+            if (byte_val & (1 << (7 - i))) {
                 cnt++;
-        } else {
-            bit_offset = bit_offset - bit_offset % 8 + 7;
+            }
+        }
+    } else {
+        // 处理第一个字节的部分位
+        unsigned char first_byte = bits[byte_begin];
+        for (uint i = begin % 8; i < 8; i++) {
+            if (first_byte & (1 << (7 - i))) {
+                cnt++;
+            }
+        }
+
+        // 处理中间的完整字节
+        for (uint byte_idx = byte_begin + 1; byte_idx < byte_end; byte_idx++) {
+            cnt += __builtin_popcount(static_cast<unsigned char>(bits[byte_idx]));
+        }
+
+        // 处理最后一个字节的部分位
+        unsigned char last_byte = bits[byte_end];
+        for (uint i = 0; i <= end % 8; i++) {
+            if (last_byte & (1 << (7 - i))) {
+                cnt++;
+            }
         }
     }
+
     return cnt;
 }
 
-uint AccessBitSequence(MMap<uint> &bits, ulong bit_start, uint data_width) {
+uint AccessBitSequence(MMap<uint>& bits, ulong bit_start, uint data_width) {
     uint uint_base = bit_start / 32;
     uint offset_in_uint = bit_start % 32;
 
@@ -60,4 +100,4 @@ uint AccessBitSequence(MMap<uint> &bits, ulong bit_start, uint data_width) {
 
     return data;
 }
-} // namespace bitop
+}  // namespace bitop

@@ -1,0 +1,6 @@
+.vscode
+bin/
+build/
+lib/
+extern/*/
+!extern/*

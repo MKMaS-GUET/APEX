@@ -1,15 +1,15 @@
 #include "avpjoin/utils/join_list.hpp"
 #include <iostream>
 
-JoinList::JoinList() : using_bin_search_(true) { lists_ = std::vector<std::span<uint>>(); }
-
-JoinList::JoinList(uint using_bin_search) : using_bin_search_(using_bin_search) {
+JoinList::JoinList() {
     lists_ = std::vector<std::span<uint>>();
 }
 
-JoinList::JoinList(std::vector<std::span<uint>> &lists) : using_bin_search_(true) { AddLists(lists); }
+JoinList::JoinList(std::vector<std::span<uint>>& lists) : using_bin_search_(true) {
+    AddLists(lists);
+}
 
-void JoinList::AddList(const std::span<uint> &list) {
+void JoinList::AddList(const std::span<uint>& list) {
     if (lists_.size() == 0 || list.size() == 0) {
         lists_.push_back(list);
         return;
@@ -26,7 +26,7 @@ void JoinList::AddList(const std::span<uint> &list) {
     lists_.push_back(list);
 }
 
-void JoinList::AddLists(const std::vector<std::span<uint>> &lists) {
+void JoinList::AddLists(const std::vector<std::span<uint>>& lists) {
     for (auto it = lists.begin(); it != lists.end(); it++) {
         AddList(*it);
     }
@@ -39,12 +39,10 @@ void JoinList::UpdateCurrentPostion() {
 }
 
 void JoinList::Seek(int i, uint val) {
-
     // using lower_bound
-    auto &list = lists_[i];
+    auto& list = lists_[i];
     if (using_bin_search_) {
-        auto it = std::lower_bound(list.begin(), list.end(), val);
-        list_current_pos_[i] = it;
+        list_current_pos_[i] = std::lower_bound(list.begin(), list.end(), val);
     } else {
         auto it = list_current_pos_[i];
         auto end = list.end();
@@ -68,11 +66,17 @@ void JoinList::Seek(int i, uint val) {
     }
 }
 
-uint JoinList::GetCurrentValOfList(int i) { return *list_current_pos_[i]; }
+uint JoinList::GetCurrentValOfList(int i) {
+    return *list_current_pos_[i];
+}
 
-void JoinList::NextVal(int i) { list_current_pos_[i]++; }
+void JoinList::NextVal(int i) {
+    list_current_pos_[i]++;
+}
 
-std::span<uint> JoinList::GetListByIndex(int i) { return lists_[i]; }
+std::span<uint> JoinList::GetListByIndex(int i) {
+    return lists_[i];
+}
 
 bool JoinList::HasEmpty() {
     for (long unsigned int i = 0; i < lists_.size(); i++) {
@@ -92,4 +96,6 @@ void JoinList::Clear() {
     list_current_pos_.clear();
 }
 
-int JoinList::Size() { return lists_.size(); }
+int JoinList::Size() {
+    return lists_.size();
+}

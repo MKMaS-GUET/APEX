@@ -4,7 +4,6 @@
 #include "query_executor.hpp"
 
 class ResultGenerator {
-
     int var_id_;
 
     bool at_end_ = false;
@@ -35,13 +34,16 @@ class ResultGenerator {
 
     void GenCandidateValue();
 
-  public:
+   public:
     ResultGenerator() = default;
 
-    ResultGenerator(const std::vector<ResultMap> &results,
-                    const phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>> &result_relation, uint limit);
+    ResultGenerator(const std::vector<ResultMap>& results,
+                    const phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>& result_relation,
+                    uint limit);
 
-    uint GenerateResults();
+    uint GenerateResults(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser);
+
+    uint PrintResult(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser);
 
     std::vector<std::vector<uint>> results();
 };
