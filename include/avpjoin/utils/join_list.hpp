@@ -7,13 +7,6 @@
 #include <string>
 #include <vector>
 
-/**
- * @class JoinList
- * @brief A utility class for managing and performing operations on a collection of lists to support Leapfrog join.
- *
- * This class provides functionality to manage multiple lists (represented as spans of unsigned integers),
- * perform operations such as finding the shortest list, updating positions, seeking values, and more.
- */
 class JoinList {
     /**
      * @brief A vector that holds a collection of spans, where each span represents

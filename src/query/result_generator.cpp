@@ -1,38 +1,48 @@
 #include "avpjoin/query/result_generator.hpp"
 #include <span>
 
-ResultGenerator::ResultGenerator(const std::vector<ResultMap>& result_map,
-                                 const phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>& result_relation,
-                                 const uint limit) {
-    var_id_ = -1;
-    at_end_ = false;
+ResultGenerator::ResultGenerator(std::vector<ResultMap>& result_map,
+                                 std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
+                                 uint limit) {
     limit_ = limit;
 
-    result_map_ = result_map;
+    variable_id_ = -1;
+    at_end_ = false;
+
+    result_map_ = &result_map;
 
     result_map_keys_.resize(result_map.size());
-    for (size_t i = 0; i < result_map_.size(); i++)
-        result_map_keys_[i].resize(result_map_[i].begin()->first.size(), 0);
+    for (size_t i = 0; i < result_map_->size(); i++)
+        result_map_keys_[i].resize(result_map_->at(i).begin()->first.size(), 0);
 
     result_relation_ = result_relation;
 
-    results_ = std::vector<std::vector<uint>>();
+    uint size = 1;
+    for (auto& result : result_map)
+        size *= result.size();
+    results_ = std::make_shared<std::vector<std::vector<uint>>>();
+    results_->reserve(size);
     current_result_ = std::vector<uint>(result_map.size(), 0);
     candidate_value_ = std::vector<std::span<uint>>(result_map.size());
     candidate_idx_ = std::vector<uint>(result_map.size(), 0);
 }
 
-void ResultGenerator::Up() {
-    candidate_value_[var_id_] = std::span<uint>();
-    candidate_idx_[var_id_] = 0;
+ResultGenerator::~ResultGenerator() {
+    result_map_->clear();
+    results_->clear();
+}
 
-    --var_id_;
+void ResultGenerator::Up() {
+    candidate_value_[variable_id_] = std::span<uint>();
+    candidate_idx_[variable_id_] = 0;
+
+    --variable_id_;
 }
 
 void ResultGenerator::Down() {
-    ++var_id_;
+    ++variable_id_;
 
-    if (candidate_value_[var_id_].empty()) {
+    if (candidate_value_[variable_id_].empty()) {
         GenCandidateValue();
         if (at_end_)
             return;
@@ -51,27 +61,27 @@ void ResultGenerator::Next() {
 }
 
 void ResultGenerator::GenCandidateValue() {
-    auto it = result_map_[var_id_].find(result_map_keys_[var_id_]);
-    if (it != result_map_[var_id_].end())
-        candidate_value_[var_id_] = it->second;
+    auto it = result_map_->at(variable_id_).find(result_map_keys_[variable_id_]);
+    if (it != result_map_->at(variable_id_).end())
+        candidate_value_[variable_id_] = it->second;
     else
-        candidate_value_[var_id_] = std::span<uint>();
+        candidate_value_[variable_id_] = std::span<uint>();
 
-    if (candidate_value_[var_id_].empty())
+    if (candidate_value_[variable_id_].empty())
         at_end_ = true;
 }
 
 bool ResultGenerator::UpdateCurrentResult() {
-    size_t idx = candidate_idx_[var_id_];
+    size_t idx = candidate_idx_[variable_id_];
 
-    if (idx < candidate_value_[var_id_].size()) {
-        uint value = candidate_value_[var_id_][idx];
-        candidate_idx_[var_id_]++;
-        current_result_[var_id_] = value;
+    if (idx < candidate_value_[variable_id_].size()) {
+        uint value = candidate_value_[variable_id_][idx];
+        candidate_idx_[variable_id_]++;
+        current_result_[variable_id_] = value;
 
-        for (auto& child_pos : result_relation_[var_id_])
+        for (auto& child_pos : result_relation_[variable_id_]) {
             result_map_keys_[child_pos.first][child_pos.second] = value;
-
+        }
         return true;
     } else {
         at_end_ = true;
@@ -81,6 +91,24 @@ bool ResultGenerator::UpdateCurrentResult() {
 }
 
 uint ResultGenerator::PrintResult(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser) {
+    while (true) {
+        if (at_end_) {
+            if (variable_id_ == 0)
+                break;
+            Up();
+            Next();
+        } else {
+            if (variable_id_ == int(result_map_->size() - 1)) {
+                results_->push_back(current_result_);
+                // if (results_.size() >= limit_)
+                //     break;
+                Next();
+            } else {
+                Down();
+            }
+        }
+    }
+
     const auto& modifier = parser.project_modifier();
     // project_variables 是要输出的变量顺序
     // 而 result 的变量顺序是计划生成中的变量排序
@@ -92,7 +120,7 @@ uint ResultGenerator::PrintResult(QueryExecutor& executor, IndexRetriever& index
 
     std::vector<std::pair<uint, Position>> prior_pos = executor.MappingVariable(print_var_order);
 
-    auto last = results_.end();
+    auto last = results_->end();
 
     uint cnt = 0;
     if (modifier.modifier_type == SPARQLParser::ProjectModifier::Distinct) {
@@ -112,14 +140,14 @@ uint ResultGenerator::PrintResult(QueryExecutor& executor, IndexRetriever& index
                                [&indexes_to_remove](uint value) { return indexes_to_remove.count(value) > 0; }),
                 not_projection_variable_index.end());
 
-            for (uint result_id = 0; result_id < results_.size(); result_id++) {
+            for (uint result_id = 0; result_id < results_->size(); result_id++) {
                 for (const auto& idx : not_projection_variable_index)
-                    results_[result_id][idx] = 0;
+                    (*results_)[result_id][idx] = 0;
             }
-            std::sort(results_.begin(), results_.end());
+            std::sort(results_->begin(), results_->end());
         }
 
-        last = std::unique(results_.begin(), results_.end(),
+        last = std::unique(results_->begin(), results_->end(),
                            // 判断两个列表 a 和 b 是否相同，
                            [&](const std::vector<uint>& a, const std::vector<uint>& b) {
                                // std::all_of 可以用来判断数组中的值是否都满足一个条件
@@ -130,46 +158,16 @@ uint ResultGenerator::PrintResult(QueryExecutor& executor, IndexRetriever& index
                                                   });
                            });
     }
-    for (auto it = results_.begin(); it != last; ++it) {
+    for (auto it = results_->begin(); it != last; ++it) {
         const auto& item = *it;
-        for (const auto& [prior, pos] : prior_pos) {
+        for (const auto& [prior, pos] : prior_pos)
             std::cout << index.ID2String(item[prior], pos) << " ";
-        }
         std::cout << std::endl;
         cnt++;
     }
     return cnt;
 }
 
-uint ResultGenerator::GenerateResults(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser) {
-    while (true) {
-        if (at_end_) {
-            if (var_id_ == 0)
-                break;
-            Up();
-            Next();
-        } else {
-            if (var_id_ == int(result_map_.size() - 1)) {
-                results_.push_back(current_result_);
-                if (results_.size() >= limit_)
-                    break;
-                Next();
-            } else {
-                Down();
-            }
-        }
-    }
-    // std::cout << "Result: " << std::endl;
-    // for (auto& result : results_) {
-    //     for (const auto& value : result)
-    //         std::cout << value << " ";
-    //     std::cout << std::endl;
-    // }
-    PrintResult(executor, index, parser);
-
-    return results_.size();
-}
-
-std::vector<std::vector<uint>> ResultGenerator::results() {
+std::shared_ptr<std::vector<std::vector<uint>>> ResultGenerator::results() {
     return results_;
 }

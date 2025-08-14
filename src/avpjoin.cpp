@@ -57,7 +57,7 @@ void avpjoin::Query(const std::string& db_path, const std::string& data_file) {
             if (!executor.zero_result()) {
                 auto result_generator =
                     ResultGenerator(executor.result_map(), executor.result_relation(), parser.Limit());
-                result_count = result_generator.GenerateResults(executor, *index, parser);
+                result_count = result_generator.PrintResult(executor, *index, parser);
             }
             auto projection_end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> projection_time = projection_end - projection_start;

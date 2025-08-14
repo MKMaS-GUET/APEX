@@ -1,12 +1,16 @@
 #ifndef QUERY_EXECUTOR_HPP
 #define QUERY_EXECUTOR_HPP
 
-#include <avpjoin/utils/join_list.hpp>
 #include <chrono>
 #include <list>
+#include <span>
 #include <string>
 #include <vector>
+
 #include "avpjoin/index/index_retriever.hpp"
+#include "avpjoin/query/variable_group.hpp"
+#include "avpjoin/utils/join_list.hpp"
+#include "result_map.hpp"
 
 using Term = SPARQLParser::Term;
 
@@ -16,20 +20,9 @@ using TripplePattern = std::vector<std::array<SPARQLParser::Term, 3>>;
 
 using CandidateMap = phmap::flat_hash_map<uint, std::span<uint>>;
 
-struct VectorHash {
-    std::size_t operator()(const std::vector<uint>& vec) const {
-        std::size_t hash = 0;
-        for (uint v : vec)
-            hash ^= std::hash<uint>()(v) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        return hash;
-    }
-};
-
-using ResultMap = phmap::flat_hash_map<std::vector<uint>, std::span<uint>, VectorHash>;
-
 class QueryExecutor {
    public:
-    struct Item {
+    struct Variable {
         std::string variable;
 
         Position position;
@@ -40,7 +33,9 @@ class QueryExecutor {
 
         CandidateMap candidates;
 
-        Item* connection;
+        int total_set_size;
+
+        Variable* connection;
 
         bool is_none;
 
@@ -48,11 +43,11 @@ class QueryExecutor {
 
         int var_id;
 
-        Item();
+        Variable();
 
-        Item(std::string variable, Position position, std::span<uint> candidates);
+        Variable(std::string variable, Position position, std::span<uint> candidates);
 
-        Item(std::string variable, Position position, uint triple_constant_id, Position triple_constant_pos);
+        Variable(std::string variable, Position position, uint triple_constant_id, Position triple_constant_pos);
     };
 
    private:
@@ -64,36 +59,40 @@ class QueryExecutor {
 
     std::shared_ptr<IndexRetriever> index_;
 
-    phmap::flat_hash_map<std::string, std::list<Item>> variable2item_;
+    phmap::flat_hash_map<std::string, std::list<Variable>> str2var_;
 
-    std::vector<std::pair<std::string, std::list<Item>*>> plan_;
+    std::vector<std::pair<std::string, std::vector<Variable*>>> plan_;
 
     std::vector<std::string> remaining_variables_;
 
     std::vector<ResultMap> result_map_;
 
-    phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>> result_relation_;
+    std::vector<std::vector<std::pair<uint, uint>>> result_relation_;
 
     std::chrono::duration<double, std::milli> query_duration_;
 
-    uint RetrieveCandidates(Position constant_pos,
-                            uint constant_id,
-                            Position value_pos,
-                            ResultMap& values,
-                            CandidateMap& candidates);
+    void PreRetrieve();
 
-    std::list<QueryExecutor::Item>* NextVarieble();
+    void RetrieveCandidates(Variable& variable, ResultMap& values);
+
+    std::vector<VariableGroup::Group> GetVariableGroup();
+
+    std::vector<VariableGroup*> GetResultRelationAndVariableGroup(std::vector<QueryExecutor::Variable*>& vars);
+
+    std::vector<QueryExecutor::Variable*> NextVarieble();
 
     std::span<uint> LeapfrogJoin(JoinList& lists);
 
-    uint CPUJoin(std::vector<CandidateMap>& sets_group, ResultMap& result);
+    uint ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
+                      std::vector<VariableGroup*> variable_groups,
+                      ResultMap& result);
 
    public:
-    double time = 0;
-
     QueryExecutor(std::shared_ptr<IndexRetriever> index,
                   const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
                   uint limit);
+
+    ~QueryExecutor();
 
     void Query();
 
@@ -107,7 +106,7 @@ class QueryExecutor {
 
     std::vector<ResultMap>& result_map();
 
-    phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>& result_relation();
+    std::vector<std::vector<std::pair<uint, uint>>>& result_relation();
 };
 
 #endif  // QUERY_EXECUTOR_HPP

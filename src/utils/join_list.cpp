@@ -39,7 +39,6 @@ void JoinList::UpdateCurrentPostion() {
 }
 
 void JoinList::Seek(int i, uint val) {
-    // using lower_bound
     auto& list = lists_[i];
     if (using_bin_search_) {
         list_current_pos_[i] = std::lower_bound(list.begin(), list.end(), val);

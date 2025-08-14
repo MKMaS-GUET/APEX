@@ -1,0 +1,108 @@
+#ifndef RESULT_MAP_TRAVERSER_HPP
+#define RESULT_MAP_TRAVERSER_HPP
+
+#include <span>
+
+#include "result_map.hpp"
+
+using CandidateMap = phmap::flat_hash_map<uint, std::span<uint>>;
+
+class VariableGroup {
+   private:
+    int level_;
+
+    bool at_end_ = false;
+
+    std::vector<ResultMap*> result_map_;
+
+    std::vector<std::vector<std::pair<uint, uint>>> result_relation_;
+
+    std::vector<std::vector<uint>> result_map_keys_;
+
+    std::vector<uint> current_result_;
+
+    std::vector<std::span<uint>> candidate_value_;
+
+    std::vector<uint> candidate_idx_;
+
+    std::vector<std::vector<uint>> results_;
+
+    void Up();
+
+    void Down();
+
+    void Next();
+
+    bool UpdateCurrentResult();
+
+    void GenCandidateValue();
+
+   public:
+    std::vector<uint> var_offsets;
+    std::vector<uint> key_offsets;
+
+    // 每一个 var 需要 results_ 中的哪一列数据
+    std::vector<uint> var_result_offset;
+
+    struct Group {
+        std::vector<std::vector<uint>> ancestors;
+        std::vector<uint> var_offsets;
+        std::vector<uint> key_offsets;
+    };
+
+    class iterator {
+       private:
+        const VariableGroup* var_group_;
+        size_t index_;
+
+       public:
+        inline iterator(const VariableGroup* var_group, size_t index) : var_group_(var_group), index_(index) {}
+
+        inline const std::vector<uint>& operator*() const { return var_group_->results_[index_]; }
+
+        inline const std::vector<uint>* operator->() const { return &(operator*()); }
+
+        inline iterator& operator++() {
+            ++index_;
+            return *this;
+        }
+
+        inline iterator operator++(int) {
+            iterator tmp = *this;
+            ++index_;
+            return tmp;
+        }
+
+        inline iterator operator+(std::ptrdiff_t n) const { return iterator(var_group_, index_ + n); }
+
+        inline iterator& operator+=(std::ptrdiff_t n) {
+            index_ += n;
+            return *this;
+        }
+
+        // 优化比较操作符
+        inline bool operator==(const iterator& other) const { return index_ == other.index_; }
+
+        inline bool operator!=(const iterator& other) const { return index_ != other.index_; }
+    };
+
+    VariableGroup() = default;
+
+    VariableGroup(std::vector<ResultMap>& result_map,
+                  std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
+                  Group group);
+
+    VariableGroup(Group group);
+
+    VariableGroup(ResultMap& map, Group group);
+
+    ~VariableGroup();
+
+    iterator begin() const { return iterator(this, 0); }
+
+    iterator end() const { return iterator(this, results_.size()); }
+
+    size_t size() const { return results_.size(); }
+};
+
+#endif

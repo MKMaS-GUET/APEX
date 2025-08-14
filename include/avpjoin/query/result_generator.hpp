@@ -4,19 +4,19 @@
 #include "query_executor.hpp"
 
 class ResultGenerator {
-    int var_id_;
+    int variable_id_;
 
     bool at_end_ = false;
 
     uint limit_;
 
-    std::vector<ResultMap> result_map_;
+    std::shared_ptr<std::vector<std::vector<uint>>> results_;
+
+    std::vector<ResultMap>* result_map_;
 
     std::vector<std::vector<uint>> result_map_keys_;
 
-    phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>> result_relation_;
-
-    std::vector<std::vector<uint>> results_;
+    std::vector<std::vector<std::pair<uint, uint>>> result_relation_;
 
     std::vector<uint> current_result_;
 
@@ -37,15 +37,15 @@ class ResultGenerator {
    public:
     ResultGenerator() = default;
 
-    ResultGenerator(const std::vector<ResultMap>& results,
-                    const phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>& result_relation,
+    ResultGenerator(std::vector<ResultMap>& results,
+                    std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
                     uint limit);
 
-    uint GenerateResults(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser);
+    ~ResultGenerator();
 
     uint PrintResult(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser);
 
-    std::vector<std::vector<uint>> results();
+    std::shared_ptr<std::vector<std::vector<uint>>> results();
 };
 
 #endif
