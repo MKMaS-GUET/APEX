@@ -134,130 +134,78 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
         result_relation_.push_back(std::vector<std::pair<uint, uint>>());
     // remaining_variables to remaining_variables_
     remaining_variables_.reserve(remaining_variables.size());
-    for (const auto& variable : remaining_variables) {
+    for (const auto& variable : remaining_variables)
         remaining_variables_.push_back(variable);
-    }
 }
 
 std::vector<QueryExecutor::Variable*> QueryExecutor::NextVarieble() {
     if (remaining_variables_.empty())
         return {};
 
-    uint next_variable_idx;
-    std::vector<QueryExecutor::Variable*> next_plan;
+    std::vector<uint> link_cnt;
+    std::vector<uint> var_cnt;
+    std::vector<uint> min_size;
+    std::vector<uint> remaining_variable_idx;
 
-    if (plan_.empty()) {
-        uint max_var_cnt = 0;
-        for (auto& variable : remaining_variables_) {
-            if (str2var_[variable].size() > max_var_cnt)
-                max_var_cnt = str2var_[variable].size();
-        }
+    for (uint i = 0; i < remaining_variables_.size(); i++) {
+        auto& vars = str2var_[remaining_variables_[i]];
 
-        uint first_variable_idx = 0;
-        uint min_set_size = __UINT32_MAX__;
-        for (uint i = 0; i < remaining_variables_.size(); i++) {
-            auto& vars = str2var_[remaining_variables_[i]];
-            if (vars.size() == max_var_cnt) {
-                JoinList join_list;
-                uint min_size = __UINT32_MAX__;
-                for (auto& var : vars) {
-                    uint size = 0;
-                    if (var.connection) {
-                        if (var.position == SPARQLParser::Term::kSubject)
-                            size = index_->GetSSetSize(var.triple_constant_id);
-                        if (var.position == SPARQLParser::Term::kObject)
-                            size = index_->GetOSetSize(var.triple_constant_id);
-                        if (min_size > size)
-                            min_size = size;
-                    }
-                    if (var.is_single) {
-                        size = var.candidates[0].size();
-                        if (min_size > size)
-                            min_size = size;
-                    }
+        uint link = 0;
+        uint var_min_size = __UINT32_MAX__;
+        for (auto& var : vars) {
+            if (var.is_none)
+                link++;
+            uint size = __UINT32_MAX__;
+            if (!var.is_single) {
+                if (var.connection->var_id == -1) {
+                    if (var.position == SPARQLParser::Term::kSubject)
+                        size = index_->GetSSetSize(var.triple_constant_id);
+                    if (var.position == SPARQLParser::Term::kObject)
+                        size = index_->GetOSetSize(var.triple_constant_id);
                 }
-                if (min_set_size > min_size) {
-                    first_variable_idx = i;
-                    min_set_size = min_size;
-                }
+            } else {
+                size = var.candidates.begin()->second.size();
             }
+            if (size < var_min_size)
+                var_min_size = size;
         }
+        link_cnt.push_back(link ? link : __UINT32_MAX__);
+        var_cnt.push_back(vars.size());
+        min_size.push_back(var_min_size);
+        remaining_variable_idx.push_back(i);
 
-        next_variable_idx = first_variable_idx;
-    } else {
-        // 可能会导致的交集次数
-        std::vector<uint> join_cnts;
-        // 集合的平均大小
-        std::vector<double> avg_sizes;
-        std::vector<uint> var_cnts;
-
-        for (uint i = 0; i < remaining_variables_.size(); i++) {
-            auto& vars = str2var_[remaining_variables_[i]];
-            uint join_cnt = 1;
-            uint total_set_size = 0;
-            uint total_set_cnt = 0;
-            for (auto& var : vars) {
-                if (var.connection && var.connection->var_id != -1) {
-                    total_set_size += var.total_set_size;
-                    var.is_none = true;
-                    total_set_cnt += var.candidates.size();
-                    join_cnt *= total_set_cnt;
-                }
-            }
-            join_cnts.push_back(join_cnt);
-            if (total_set_cnt != 0)
-                avg_sizes.push_back(total_set_size / total_set_cnt);
-            else
-                avg_sizes.push_back(__UINT32_MAX__);
-            var_cnts.push_back(vars.size());
-        }
-
-        auto [min_j, max_j] = std::minmax_element(join_cnts.begin(), join_cnts.end());
-        auto [min_a, max_a] = std::minmax_element(avg_sizes.begin(), avg_sizes.end());
-        auto [min_i, max_i] = std::minmax_element(var_cnts.begin(), var_cnts.end());
-
-        double log_min_j = std::log(*min_j);
-        double log_max_j = std::log(*max_j);
-        double log_min_a = std::log(*min_a);
-        double log_max_a = std::log(*max_a);
-        double log_min_i = std::log(*min_i);
-        double log_max_i = std::log(*max_i);
-
-        const double w_join = 1.0;  // join_cnt 的权重
-        const double w_size = 1.5;  // avg_size 的权重
-        const double w_var = 0.5;   // var_cnt 的权重
-        std::vector<double> scores;
-        scores.reserve(join_cnts.size());
-        for (uint i = 0; i < remaining_variables_.size(); ++i) {
-            double join_cnt = std::log(join_cnts[i]);
-            double avg_size = std::log(avg_sizes[i]);
-            double var_cnt = std::log(var_cnts[i]);
-
-            // join_cnt 越小越好，avg_size 越小越好，var_cnt 越大越好
-            double score = w_join * (log_max_j - join_cnt) / (log_max_j - log_min_j + 1e-9) +
-                           w_size * (log_max_a - avg_size) / (log_max_a - log_min_a + 1e-9) +
-                           w_var * (var_cnt - log_min_i) / (log_max_i - log_min_i + 1e-9);
-
-            // std::cout << "Variable: " << remaining_variables_[i] << " Join Count: " << join_cnts[i]
-            //           << " Avg Size: " << avg_sizes[i] << " var Count: " << var_cnts[i] << " Score: " << score
-            //           << std::endl;
-            scores.push_back(score);
-        }
-        auto max_score_it = std::max_element(scores.begin(), scores.end());
-        next_variable_idx = std::distance(scores.begin(), max_score_it);
+        // std::cout << remaining_variables_[i] << " " << link_cnt.back() << " " << var_cnt.back() << " "
+        //           << min_size.back() << std::endl;
     }
 
+    std::sort(remaining_variable_idx.begin(), remaining_variable_idx.end(), [&](uint a, uint b) {
+        if (link_cnt[a] != link_cnt[b])
+            return link_cnt[a] < link_cnt[b];  // link_cnt 越小越前
+        if (var_cnt[a] != var_cnt[b])
+            return var_cnt[a] > var_cnt[b];  // var_cnt 越大越前
+        return min_size[a] < min_size[b];
+    });
+
+    // std::vector<std::string> test = {"?v3", "?v0", "?v7", "?v8", "?v2", "?v4", "?v9", "?v6", "?v1", "?v5"};
+    // std::string next_variable = test[variable_id_];
+
+    uint next_variable_idx = remaining_variable_idx.front();
     std::string next_variable = remaining_variables_[next_variable_idx];
     remaining_variables_.erase(remaining_variables_.begin() + next_variable_idx);
 
+    std::cout << "-------------------------------" << std::endl;
     std::cout << "Next variable: " << next_variable << std::endl;
 
+    std::vector<QueryExecutor::Variable*> next_plan;
     for (auto& var : str2var_[next_variable])
         next_plan.push_back(&var);
     plan_.push_back({next_variable, next_plan});
 
-    for (auto& var : plan_.back().second)
+    for (auto& var : plan_.back().second) {
         var->var_id = plan_.size() - 1;
+        if (var->connection && var->connection->var_id == -1)
+            var->connection->is_none = true;
+    }
 
     return plan_.back().second;
 }
@@ -502,50 +450,27 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
                 local_result_len += intersection.size();
             }
 
-            // 更新迭代器
-            if (target_group_idx < group_cnt) {
-                // 多线程模式：只更新目标组的迭代器
-                ++iterators[target_group_idx];
-
-                // 更新其他组的迭代器
-                for (int i = group_cnt - 1; i >= 0; i--) {
-                    if (i == int(target_group_idx))
-                        continue;
-
-                    ++iterators[i];
-                    if (iterators[i] != ends[i])
-                        break;
-                    iterators[i] = variable_groups[i]->begin();
-                }
-            } else {
-                // 单线程模式：按原逻辑更新所有迭代器
-                int group_idx = group_cnt - 1;
-                while (group_idx >= 0) {
-                    ++iterators[group_idx];
-                    if (iterators[group_idx] != ends[group_idx])
-                        break;
-                    iterators[group_idx] = variable_groups[group_idx]->begin();
-                    --group_idx;
-                }
-
-                if (group_idx == -1)
+            int group_idx = group_cnt - 1;
+            while (group_idx >= 0) {
+                ++iterators[group_idx];
+                if (iterators[group_idx] != ends[group_idx])
                     break;
+                iterators[group_idx] = variable_groups[group_idx]->begin();
+                --group_idx;
             }
+
+            if (group_idx == -1)
+                break;
         }
 
         return local_result_len;
     };
-
-    // if (max_join_cnt <= 256)
-    //     return joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
-
+    // uint num_threads = 2;
     // 数据量大，使用多线程
-    // uint num_threads = std::min(static_cast<uint>(max_join_cnt / 256), static_cast<uint>(16));
+    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 256), static_cast<uint>(16));
     // std::cout << max_join_cnt << " " << num_threads << std::endl;
-    // if (num_threads <= 1)
-    //     return joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
-
-    uint num_threads = 24;
+    if (num_threads <= 1)
+        return joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
 
     // 计算每个线程的范围
     std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
@@ -740,7 +665,6 @@ void QueryExecutor::Query() {
     double join_takes = 0;
     auto vars = NextVarieble();
     while (vars.size()) {
-        std::cout << "-------------------------------" << std::endl;
         std::cout << "variable_id: " << variable_id_ << std::endl;
 
         auto begin = std::chrono::high_resolution_clock::now();
