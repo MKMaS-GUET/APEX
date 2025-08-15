@@ -71,8 +71,6 @@ class QueryExecutor {
 
     std::chrono::duration<double, std::milli> query_duration_;
 
-    void PreRetrieve();
-
     void RetrieveCandidates(Variable& variable, ResultMap& values);
 
     std::vector<VariableGroup::Group> GetVariableGroup();
@@ -84,6 +82,10 @@ class QueryExecutor {
     std::span<uint> LeapfrogJoin(JoinList& lists);
 
     uint ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
+                      std::vector<VariableGroup*> variable_groups,
+                      ResultMap& result);
+
+    uint SequentialJoin(std::vector<QueryExecutor::Variable*> vars,
                       std::vector<VariableGroup*> variable_groups,
                       ResultMap& result);
 

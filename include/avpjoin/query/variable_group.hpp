@@ -19,11 +19,11 @@ class VariableGroup {
 
     std::vector<std::vector<uint>> result_map_keys_;
 
-    std::vector<uint> current_result_;
-
     std::vector<std::span<uint>> candidate_value_;
 
     std::vector<uint> candidate_idx_;
+
+    std::vector<uint> current_result_;
 
     std::vector<std::vector<uint>> results_;
 
@@ -56,6 +56,8 @@ class VariableGroup {
         size_t index_;
 
        public:
+        inline iterator() = default;
+
         inline iterator(const VariableGroup* var_group, size_t index) : var_group_(var_group), index_(index) {}
 
         inline const std::vector<uint>& operator*() const { return var_group_->results_[index_]; }

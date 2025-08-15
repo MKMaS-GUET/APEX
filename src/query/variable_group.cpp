@@ -1,6 +1,6 @@
 #include "avpjoin/query/variable_group.hpp"
+#include <execution>
 #include <iostream>
-#include <unordered_set>
 
 VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
                              std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
@@ -24,24 +24,20 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
         ResultMap& first_map = result_map[levels[0]];
 
         if (first_map.size() > 1) {
-            size_t estimated_size = 0;
+            size_t est_size = 0;
             for (auto& [_, set] : first_map)
-                estimated_size += set.size();
+                est_size += set.size();
 
-            std::vector<uint> distinct_values;
-            distinct_values.reserve(estimated_size);
+            std::vector<uint> all_values;
+            all_values.reserve(est_size);
+            for (auto& [_, set] : first_map)
+                all_values.insert(all_values.end(), set.begin(), set.end());
 
-            phmap::flat_hash_set<uint> seen;
-            seen.reserve(estimated_size);
-            for (auto& [_, set] : first_map) {
-                for (auto v : set) {
-                    if (seen.insert(v).second)
-                        distinct_values.push_back(v);
-                }
-            }
+            std::sort(std::execution::par_unseq, all_values.begin(), all_values.end());
+            all_values.erase(std::unique(all_values.begin(), all_values.end()), all_values.end());
+
             result_map_.push_back(new ResultMap());
-            result_map_[0]->emplace(std::vector<uint>(0, 0),
-                                    std::span<uint>(distinct_values.begin(), distinct_values.end()));
+            result_map_[0]->emplace(std::vector<uint>(0, 0), std::span<uint>(all_values.begin(), all_values.end()));
         } else {
             result_map_.push_back(&first_map);
         }
@@ -115,25 +111,26 @@ VariableGroup::VariableGroup(Group group) {
 }
 
 VariableGroup::VariableGroup(ResultMap& map, Group group) {
-    auto begin = std::chrono::high_resolution_clock::now();
-
     var_offsets = group.var_offsets;
     key_offsets = group.key_offsets;
 
     var_result_offset.push_back(0);
 
-    results_.reserve(map.size() * 2);
-    phmap::flat_hash_set<uint> seen;
-    seen.reserve(map.size() * 2);
-    for (auto& [_, set] : map) {
-        for (auto v : set) {
-            if (seen.insert(v).second)
-                results_.push_back({v});
-        }
-    }
-    std::cout << "2 build variable groups: "
-              << std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - begin).count()
-              << " ms" << std::endl;
+    uint est_size = map.size();
+    if (est_size == 1)
+        est_size = map.begin()->second.size();
+
+    std::vector<uint> all_values;
+    all_values.reserve(est_size * 2);
+    for (auto& [_, set] : map)
+        all_values.insert(all_values.end(), set.begin(), set.end());
+
+    std::sort(std::execution::par_unseq, all_values.begin(), all_values.end());
+    all_values.erase(std::unique(all_values.begin(), all_values.end()), all_values.end());
+
+    results_ = std::vector<std::vector<uint>>(all_values.size(), std::vector<uint>(1));
+    for (uint i = 0; i < all_values.size(); i++)
+        results_[i][0] = all_values[i];
 }
 
 VariableGroup::~VariableGroup() {

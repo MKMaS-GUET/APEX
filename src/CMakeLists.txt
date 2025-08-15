@@ -10,5 +10,5 @@ file(GLOB_RECURSE srcs CONFIGURE_DEPENDS
         utils/*.cpp)
 
 add_library(${this} STATIC ${srcs})
-target_link_libraries(${this} PRIVATE phmap httplib streamvbyte)
+target_link_libraries(${this} PRIVATE phmap httplib streamvbyte TBB::tbb)
 set_target_properties(${this} PROPERTIES LINKER_LANGUAGE CXX)

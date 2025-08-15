@@ -228,7 +228,7 @@ std::vector<QueryExecutor::Variable*> QueryExecutor::NextVarieble() {
         const double w_var = 0.5;   // var_cnt 的权重
         std::vector<double> scores;
         scores.reserve(join_cnts.size());
-        for (size_t i = 0; i < remaining_variables_.size(); ++i) {
+        for (uint i = 0; i < remaining_variables_.size(); ++i) {
             double join_cnt = std::log(join_cnts[i]);
             double avg_size = std::log(avg_sizes[i]);
             double var_cnt = std::log(var_cnts[i]);
@@ -302,13 +302,13 @@ std::vector<VariableGroup::Group> QueryExecutor::GetVariableGroup() {
         var_ancestors.push_back(std::move(ancestors));
     }
 
-    const size_t n = var_ancestors.size();
+    const uint n = var_ancestors.size();
     if (n == 0)
         return {};
 
     struct DSU {
         std::vector<int> p, r;
-        explicit DSU(size_t n) : p(n), r(n, 0) { std::iota(p.begin(), p.end(), 0); }
+        explicit DSU(uint n) : p(n), r(n, 0) { std::iota(p.begin(), p.end(), 0); }
         int find(int x) { return p[x] == x ? x : p[x] = find(p[x]); }
         void unite(int a, int b) {
             a = find(a);
@@ -392,7 +392,7 @@ std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
     // 创建指向每一个列表的指针，初始指向列表的第一个值
 
     //  max 是所有指针指向位置的最大值，初始的最大值就是对列表排序后，最后一个列表的第一个值
-    size_t max = lists.GetCurrentValOfList(lists.Size() - 1);
+    uint max = lists.GetCurrentValOfList(lists.Size() - 1);
     // 当前迭代器的 id
     int idx = 0;
 
@@ -426,6 +426,169 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
                                  std::vector<VariableGroup*> variable_groups,
                                  ResultMap& result) {
     uint group_cnt = variable_groups.size();
+    std::atomic<uint> result_len = 0;
+
+    uint var_cnt = 0;
+    for (auto& group : variable_groups) {
+        for (uint offset : group->key_offsets) {
+            if (offset > 0)
+                var_cnt++;
+        }
+    }
+
+    // 找出最大的迭代器
+    uint max_size = 0;
+    uint max_group_idx = 0;
+    uint max_join_cnt = 1;
+    for (uint i = 0; i < group_cnt; i++) {
+        uint size = variable_groups[i]->size();
+        max_join_cnt *= size;
+        if (size > max_size) {
+            max_size = size;
+            max_group_idx = i;
+        }
+    }
+
+    auto joinWorker = [&](auto begin_it, auto end_it, uint target_group_idx, ResultMap& local_result) -> uint {
+        uint local_result_len = 0;
+        std::vector<VariableGroup::iterator> iterators(group_cnt);
+        std::vector<VariableGroup::iterator> ends(group_cnt);
+
+        // 初始化迭代器
+        for (uint i = 0; i < group_cnt; i++) {
+            if (i == target_group_idx) {
+                iterators[i] = begin_it;
+                ends[i] = end_it;
+            } else {
+                iterators[i] = variable_groups[i]->begin();
+                ends[i] = variable_groups[i]->end();
+            }
+        }
+
+        std::vector<uint> key(var_cnt, 0);
+
+        while (true) {
+            JoinList join_list;
+            std::fill(key.begin(), key.end(), 0);
+            bool should_break = false;
+
+            for (uint i = 0; i < group_cnt; i++) {
+                if (iterators[i] == ends[i]) {
+                    should_break = true;
+                    break;
+                }
+
+                const auto& candidate_keys = *iterators[i];
+                const auto& var_offsets = variable_groups[i]->var_offsets;
+                const auto& key_offsets = variable_groups[i]->key_offsets;
+                const auto& var_result_offset = variable_groups[i]->var_result_offset;
+                const uint key_offsets_size = key_offsets.size();
+
+                for (uint v = 0; v < key_offsets_size; v++) {
+                    uint k = candidate_keys[var_result_offset[v]];
+                    uint key_offset = key_offsets[v];
+                    if (key_offset > 0)
+                        key[key_offset - 1] = k;
+                    join_list.AddList(vars[var_offsets[v]]->candidates[k]);
+                }
+            }
+
+            if (should_break)
+                break;
+
+            std::span<uint> intersection = LeapfrogJoin(join_list);
+            if (!intersection.empty()) {
+                local_result[key] = std::move(intersection);
+                local_result_len += intersection.size();
+            }
+
+            // 更新迭代器
+            if (target_group_idx < group_cnt) {
+                // 多线程模式：只更新目标组的迭代器
+                ++iterators[target_group_idx];
+
+                // 更新其他组的迭代器
+                for (int i = group_cnt - 1; i >= 0; i--) {
+                    if (i == int(target_group_idx))
+                        continue;
+
+                    ++iterators[i];
+                    if (iterators[i] != ends[i])
+                        break;
+                    iterators[i] = variable_groups[i]->begin();
+                }
+            } else {
+                // 单线程模式：按原逻辑更新所有迭代器
+                int group_idx = group_cnt - 1;
+                while (group_idx >= 0) {
+                    ++iterators[group_idx];
+                    if (iterators[group_idx] != ends[group_idx])
+                        break;
+                    iterators[group_idx] = variable_groups[group_idx]->begin();
+                    --group_idx;
+                }
+
+                if (group_idx == -1)
+                    break;
+            }
+        }
+
+        return local_result_len;
+    };
+
+    // if (max_join_cnt <= 256)
+    //     return joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
+
+    // 数据量大，使用多线程
+    // uint num_threads = std::min(static_cast<uint>(max_join_cnt / 256), static_cast<uint>(16));
+    // std::cout << max_join_cnt << " " << num_threads << std::endl;
+    // if (num_threads <= 1)
+    //     return joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
+
+    uint num_threads = 24;
+
+    // 计算每个线程的范围
+    std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
+    auto begin_it = variable_groups[max_group_idx]->begin();
+    auto end_it = variable_groups[max_group_idx]->end();
+    uint chunk_size = max_size / num_threads;
+
+    for (uint i = 0; i < num_threads; ++i) {
+        auto chunk_end = (i == num_threads - 1) ? end_it : begin_it + chunk_size;
+        ranges.emplace_back(begin_it, chunk_end);
+        begin_it = chunk_end;
+    }
+
+    // 线程同步
+    std::mutex result_mutex;
+    std::vector<std::thread> threads;
+    threads.reserve(num_threads);
+
+    for (const auto& range : ranges) {
+        threads.emplace_back([&, range]() {
+            ResultMap thread_result;
+            uint thread_result_len = joinWorker(range.first, range.second, max_group_idx, thread_result);
+            {
+                std::lock_guard<std::mutex> lock(result_mutex);
+                for (auto& [key_val, val] : thread_result)
+                    result[key_val] = std::move(val);
+                result_len += thread_result_len;
+            }
+        });
+    }
+
+    for (auto& thread : threads) {
+        if (thread.joinable())
+            thread.join();
+    }
+
+    return result_len;
+}
+
+uint QueryExecutor::SequentialJoin(std::vector<QueryExecutor::Variable*> vars,
+                                   std::vector<VariableGroup*> variable_groups,
+                                   ResultMap& result) {
+    uint group_cnt = variable_groups.size();
     uint result_len = 0;
 
     uint var_cnt = 0;
@@ -442,19 +605,24 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
         iterators.push_back(variable_groups[i]->begin());
         ends.push_back(variable_groups[i]->end());
     }
+
+    std::vector<uint> key(var_cnt, 0);
+
     while (true) {
         JoinList join_list;
-        std::vector<uint> key(var_cnt, 0);
+        std::fill(key.begin(), key.end(), 0);
+
         for (uint i = 0; i < group_cnt; i++) {
-            if (iterators[i] == variable_groups[i]->end())
+            if (iterators[i] == ends[i])
                 return result_len;
 
             const auto& candidate_keys = *iterators[i];
             const auto& var_offsets = variable_groups[i]->var_offsets;
             const auto& key_offsets = variable_groups[i]->key_offsets;
             const auto& var_result_offset = variable_groups[i]->var_result_offset;
+            const uint key_offsets_size = key_offsets.size();
 
-            for (uint v = 0; v < key_offsets.size(); v++) {
+            for (uint v = 0; v < key_offsets_size; v++) {
                 uint k = candidate_keys[var_result_offset[v]];
                 uint key_offset = key_offsets[v];
                 if (key_offset > 0)
@@ -464,15 +632,16 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
         }
         std::span<uint> intersection = LeapfrogJoin(join_list);
         if (!intersection.empty())
-            result[key] = intersection;
-
+            result[key] = std::move(intersection);
         result_len += intersection.size();
 
-        int group_idx = group_cnt;
-        while (group_idx-- > 0) {
-            if (++iterators[group_idx] != variable_groups[group_idx]->end())
+        int group_idx = group_cnt - 1;
+        while (group_idx >= 0) {
+            ++iterators[group_idx];
+            if (iterators[group_idx] != ends[group_idx])
                 break;
             iterators[group_idx] = variable_groups[group_idx]->begin();
+            --group_idx;
         }
 
         if (group_idx == -1)
@@ -524,56 +693,6 @@ void QueryExecutor::RetrieveCandidates(Variable& variable, ResultMap& values) {
     variable.total_set_size = candidates_len;
 }
 
-void QueryExecutor::PreRetrieve() {
-    auto begin = std::chrono::high_resolution_clock::now();
-
-    for (auto& var : plan_.back().second) {
-        if (var->connection && var->connection->var_id == -1) {
-            if (var->position == SPARQLParser::Term::kSubject)
-                var->candidates[0] = index_->GetSSet(var->triple_constant_id);
-            if (var->position == SPARQLParser::Term::kObject)
-                var->candidates[0] = index_->GetOSet(var->triple_constant_id);
-        } else {
-            if (var->total_set_size == -1)
-                RetrieveCandidates(*var, result_map_[var->connection->var_id]);
-        }
-    }
-
-    if (variable_id_ > 0) {
-        for (uint i = 0; i < remaining_variables_.size(); i++) {
-            auto& vars = str2var_[remaining_variables_[i]];
-            for (auto& var : vars) {
-                if (var.connection && var.connection->var_id != -1 && var.connection->var_id != int(variable_id_)) {
-                    RetrieveCandidates(var, result_map_[var.connection->var_id]);
-                }
-            }
-        }
-    }
-
-    // if (variable_id_ > 0) {
-    //     std::vector<std::thread> threads;
-
-    //     for (uint i = 0; i < remaining_variables_.size(); i++) {
-    //         auto& vars = str2var_[remaining_variables_[i]];
-    //         for (auto& var : vars) {
-    //             if (var.connection && var.connection->var_id != -1 && var.connection->var_id != int(variable_id_)) {
-    //                 threads.emplace_back(
-    //                     [this, &var]() { RetrieveCandidates(var, result_map_[var.connection->var_id]); });
-    //             }
-    //         }
-    //     }
-
-    //     // 等待所有线程完成
-    //     for (auto& thread : threads) {
-    //         thread.join();
-    //     }
-    // }
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::cout << "RetrieveCandidates took: " << std::chrono::duration<double, std::milli>(end - begin).count()
-              << std::endl;
-}
-
 std::vector<VariableGroup*> QueryExecutor::GetResultRelationAndVariableGroup(
     std::vector<QueryExecutor::Variable*>& vars) {
     std::vector<VariableGroup::Group> var_idx_group = GetVariableGroup();
@@ -618,14 +737,27 @@ void QueryExecutor::Query() {
     uint variable_count = str2var_.size();
     result_map_.reserve(variable_count);
 
+    double join_takes = 0;
     auto vars = NextVarieble();
     while (vars.size()) {
+        std::cout << "-------------------------------" << std::endl;
         std::cout << "variable_id: " << variable_id_ << std::endl;
 
-        PreRetrieve();
-        std::vector<VariableGroup*> variable_groups = GetResultRelationAndVariableGroup(vars);
-
         auto begin = std::chrono::high_resolution_clock::now();
+        for (auto& var : vars) {
+            if (var->connection && var->connection->var_id == -1) {
+                if (var->position == SPARQLParser::Term::kSubject)
+                    var->candidates[0] = index_->GetSSet(var->triple_constant_id);
+                if (var->position == SPARQLParser::Term::kObject)
+                    var->candidates[0] = index_->GetOSet(var->triple_constant_id);
+            }
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        std::cout << "RetrievePredicate takes: " << std::chrono::duration<double, std::milli>(end - begin).count()
+                  << " ms" << std::endl;
+
+        std::vector<VariableGroup*> variable_groups = GetResultRelationAndVariableGroup(vars);
+        begin = std::chrono::high_resolution_clock::now();
         result_map_.push_back(ResultMap());
         uint result_len = ParallelJoin(vars, variable_groups, result_map_.back());
         if (result_len == 0) {
@@ -635,14 +767,24 @@ void QueryExecutor::Query() {
         }
         for (auto& group : variable_groups)
             group->~VariableGroup();
+        end = std::chrono::high_resolution_clock::now();
+        join_takes += std::chrono::duration<double, std::milli>(end - begin).count();
+        std::cout << "ParallelJoin takes: " << std::chrono::duration<double, std::milli>(end - begin).count() << " ms"
+                  << std::endl;
 
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cout << "join took: " << std::chrono::duration<double, std::milli>(end - begin).count() << std::endl;
+        begin = std::chrono::high_resolution_clock::now();
+        for (auto& var : vars) {
+            if (var->connection && var->connection->var_id == -1)
+                RetrieveCandidates(*var->connection, result_map_[var->var_id]);
+        }
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "RetrieveCandidates takes: " << std::chrono::duration<double, std::milli>(end - begin).count()
+                  << " ms" << std::endl;
 
         variable_id_++;
         vars = NextVarieble();
     }
-
+    std::cout << "Join takes: " << join_takes << " ms" << std::endl;
     auto end = std::chrono::high_resolution_clock::now();
     query_duration_ = end - begin;
 }
