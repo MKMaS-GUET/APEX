@@ -8,14 +8,14 @@ QueryExecutor::Variable::Variable()
     : position(SPARQLParser::Term::kShared),
       triple_constant_id(0),
       triple_constant_pos(SPARQLParser::Term::kShared),
-      candidates(),
+      pre_retrieve(),
       total_set_size(-1),
       connection(nullptr),
       is_none(false),
       is_single(false),
       var_id(-1) {}
 
-QueryExecutor::Variable::Variable(std::string variable, Position position, std::span<uint> candidates)
+QueryExecutor::Variable::Variable(std::string variable, Position position, std::span<uint> pre_retrieve)
     : variable(variable),
       position(position),
       triple_constant_id(0),
@@ -25,23 +25,59 @@ QueryExecutor::Variable::Variable(std::string variable, Position position, std::
       is_none(false),
       is_single(true),
       var_id(-1) {
-    this->candidates[0] = candidates;
+    this->pre_retrieve = pre_retrieve;
 }
 
 QueryExecutor::Variable::Variable(std::string variable,
                                   Position position,
                                   uint triple_constant_id,
-                                  Position triple_constant_pos)
+                                  Position triple_constant_pos,
+                                  std::shared_ptr<IndexRetriever> index)
     : variable(variable),
       position(position),
       triple_constant_id(triple_constant_id),
       triple_constant_pos(triple_constant_pos),
-      candidates(),
+      pre_retrieve(),
       total_set_size(-1),
       connection(nullptr),
       is_none(false),
       is_single(false),
-      var_id(-1) {}
+      var_id(-1),
+      index_(index) {}
+
+std::span<uint> QueryExecutor::Variable::Retrieve(uint key) {
+    if (connection->var_id != -1) {
+        Position key_pos = connection->position;
+        if (triple_constant_pos == SPARQLParser::Term::kSubject) {
+            // s ?p ?o
+            if (key_pos == SPARQLParser::Term::kPredicate)
+                return index_->GetBySP(triple_constant_id, key);
+            else if (key_pos == SPARQLParser::Term::kObject)
+                return index_->GetBySO(triple_constant_id, key);
+        } else if (triple_constant_pos == SPARQLParser::Term::kPredicate) {
+            // ?s p ?o
+            if (key_pos == SPARQLParser::Term::kSubject)
+                return index_->GetBySP(key, triple_constant_id);
+            else if (key_pos == SPARQLParser::Term::kObject)
+                return index_->GetByOP(key, triple_constant_id);
+        } else if (triple_constant_pos == SPARQLParser::Term::kObject) {
+            // ?s ?p o
+            if (key_pos == SPARQLParser::Term::kSubject)
+                return index_->GetBySO(key, triple_constant_id);
+            else if (key_pos == SPARQLParser::Term::kPredicate)
+                return index_->GetByOP(triple_constant_id, key);
+        }
+    } else {
+        if (pre_retrieve.size() == 0) {
+            if (position == SPARQLParser::Term::kSubject)
+                pre_retrieve = index_->GetSSet(triple_constant_id);
+            if (position == SPARQLParser::Term::kObject)
+                pre_retrieve = index_->GetOSet(triple_constant_id);
+        }
+        return pre_retrieve;
+    }
+    return {};
+}
 
 QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
                              const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
@@ -106,24 +142,30 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
         if (s.IsVariable() && p.IsVariable()) {
             remaining_variables.insert(s.value);
             remaining_variables.insert(p.value);
-            Variable& s_var = str2var_[s.value].emplace_back(s.value, s.position, index_->Term2ID(o), o.position);
-            Variable& p_var = str2var_[p.value].emplace_back(p.value, p.position, index_->Term2ID(o), o.position);
+            Variable& s_var =
+                str2var_[s.value].emplace_back(s.value, s.position, index_->Term2ID(o), o.position, index_);
+            Variable& p_var =
+                str2var_[p.value].emplace_back(p.value, p.position, index_->Term2ID(o), o.position, index_);
             s_var.connection = &p_var;
             p_var.connection = &s_var;
         }
         if (s.IsVariable() && o.IsVariable()) {
             remaining_variables.insert(s.value);
             remaining_variables.insert(o.value);
-            Variable& s_var = str2var_[s.value].emplace_back(s.value, s.position, index_->Term2ID(p), p.position);
-            Variable& o_var = str2var_[o.value].emplace_back(o.value, o.position, index_->Term2ID(p), p.position);
+            Variable& s_var =
+                str2var_[s.value].emplace_back(s.value, s.position, index_->Term2ID(p), p.position, index_);
+            Variable& o_var =
+                str2var_[o.value].emplace_back(o.value, o.position, index_->Term2ID(p), p.position, index_);
             s_var.connection = &o_var;
             o_var.connection = &s_var;
         }
         if (p.IsVariable() && o.IsVariable()) {
             remaining_variables.insert(p.value);
             remaining_variables.insert(o.value);
-            Variable& p_var = str2var_[p.value].emplace_back(p.value, p.position, index_->Term2ID(s), s.position);
-            Variable& o_var = str2var_[o.value].emplace_back(o.value, o.position, index_->Term2ID(s), s.position);
+            Variable& p_var =
+                str2var_[p.value].emplace_back(p.value, p.position, index_->Term2ID(s), s.position, index_);
+            Variable& o_var =
+                str2var_[o.value].emplace_back(o.value, o.position, index_->Term2ID(s), s.position, index_);
             p_var.connection = &o_var;
             o_var.connection = &p_var;
         }
@@ -164,7 +206,7 @@ std::vector<QueryExecutor::Variable*> QueryExecutor::NextVarieble() {
                         size = index_->GetOSetSize(var.triple_constant_id);
                 }
             } else {
-                size = var.candidates.begin()->second.size();
+                size = var.pre_retrieve.size();
             }
             if (size < var_min_size)
                 var_min_size = size;
@@ -437,7 +479,10 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
                     uint key_offset = key_offsets[v];
                     if (key_offset > 0)
                         key[key_offset - 1] = k;
-                    join_list.AddList(vars[var_offsets[v]]->candidates[k]);
+                    if (vars[var_offsets[v]]->pre_retrieve.size())
+                        join_list.AddList(vars[var_offsets[v]]->pre_retrieve);
+                    else
+                        join_list.AddList(vars[var_offsets[v]]->Retrieve(k));
                 }
             }
 
@@ -465,7 +510,7 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
 
         return local_result_len;
     };
-    // uint num_threads = 2;
+    // uint num_threads = 1;
     // 数据量大，使用多线程
     uint num_threads = std::min(static_cast<uint>(max_join_cnt / 256), static_cast<uint>(16));
     // std::cout << max_join_cnt << " " << num_threads << std::endl;
@@ -552,7 +597,10 @@ uint QueryExecutor::SequentialJoin(std::vector<QueryExecutor::Variable*> vars,
                 uint key_offset = key_offsets[v];
                 if (key_offset > 0)
                     key[key_offset - 1] = k;
-                join_list.AddList(vars[var_offsets[v]]->candidates[k]);
+                if (vars[var_offsets[v]]->pre_retrieve.size())
+                    join_list.AddList(vars[var_offsets[v]]->pre_retrieve);
+                else
+                    join_list.AddList(vars[var_offsets[v]]->Retrieve(k));
             }
         }
         std::span<uint> intersection = LeapfrogJoin(join_list);
@@ -574,48 +622,6 @@ uint QueryExecutor::SequentialJoin(std::vector<QueryExecutor::Variable*> vars,
     }
 
     return result_len;
-}
-
-void QueryExecutor::RetrieveCandidates(Variable& variable, ResultMap& values) {
-    CandidateMap& candidates = variable.candidates;
-    candidates.clear();
-    candidates.reserve(values.size() * 2);
-    uint candidates_len = 0;
-    auto processValues = [&](auto getter) {
-        for (const auto& [_, value] : values) {
-            for (const auto& v : value) {
-                std::span<uint> result = getter(v);
-                if (!result.empty())
-                    candidates[v] = std::move(result);
-                candidates_len += result.size();
-            }
-        }
-    };
-
-    uint constant_id = variable.triple_constant_id;
-    Position constant_pos = variable.triple_constant_pos;
-    Position value_pos = variable.connection->position;
-
-    if (constant_pos == SPARQLParser::Term::kSubject) {
-        // s ?p ?o
-        if (value_pos == SPARQLParser::Term::kPredicate)
-            processValues([&](uint p) { return index_->GetBySP(constant_id, p); });
-        else if (value_pos == SPARQLParser::Term::kObject)
-            processValues([&](uint o) { return index_->GetBySO(constant_id, o); });
-    } else if (constant_pos == SPARQLParser::Term::kPredicate) {
-        // ?s p ?o
-        if (value_pos == SPARQLParser::Term::kSubject)
-            processValues([&](uint s) { return index_->GetBySP(s, constant_id); });
-        else if (value_pos == SPARQLParser::Term::kObject)
-            processValues([&](uint o) { return index_->GetByOP(o, constant_id); });
-    } else if (constant_pos == SPARQLParser::Term::kObject) {
-        // ?s ?p o
-        if (value_pos == SPARQLParser::Term::kSubject)
-            processValues([&](uint s) { return index_->GetBySO(s, constant_id); });
-        else if (value_pos == SPARQLParser::Term::kPredicate)
-            processValues([&](uint p) { return index_->GetByOP(constant_id, p); });
-    }
-    variable.total_set_size = candidates_len;
 }
 
 std::vector<VariableGroup*> QueryExecutor::GetResultRelationAndVariableGroup(
@@ -668,20 +674,8 @@ void QueryExecutor::Query() {
         std::cout << "variable_id: " << variable_id_ << std::endl;
 
         auto begin = std::chrono::high_resolution_clock::now();
-        for (auto& var : vars) {
-            if (var->connection && var->connection->var_id == -1) {
-                if (var->position == SPARQLParser::Term::kSubject)
-                    var->candidates[0] = index_->GetSSet(var->triple_constant_id);
-                if (var->position == SPARQLParser::Term::kObject)
-                    var->candidates[0] = index_->GetOSet(var->triple_constant_id);
-            }
-        }
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cout << "RetrievePredicate takes: " << std::chrono::duration<double, std::milli>(end - begin).count()
-                  << " ms" << std::endl;
 
         std::vector<VariableGroup*> variable_groups = GetResultRelationAndVariableGroup(vars);
-        begin = std::chrono::high_resolution_clock::now();
         result_map_.push_back(ResultMap());
         uint result_len = ParallelJoin(vars, variable_groups, result_map_.back());
         if (result_len == 0) {
@@ -691,19 +685,11 @@ void QueryExecutor::Query() {
         }
         for (auto& group : variable_groups)
             group->~VariableGroup();
-        end = std::chrono::high_resolution_clock::now();
+
+        auto end = std::chrono::high_resolution_clock::now();
         join_takes += std::chrono::duration<double, std::milli>(end - begin).count();
         std::cout << "ParallelJoin takes: " << std::chrono::duration<double, std::milli>(end - begin).count() << " ms"
                   << std::endl;
-
-        begin = std::chrono::high_resolution_clock::now();
-        for (auto& var : vars) {
-            if (var->connection && var->connection->var_id == -1)
-                RetrieveCandidates(*var->connection, result_map_[var->var_id]);
-        }
-        end = std::chrono::high_resolution_clock::now();
-        std::cout << "RetrieveCandidates takes: " << std::chrono::duration<double, std::milli>(end - begin).count()
-                  << " ms" << std::endl;
 
         variable_id_++;
         vars = NextVarieble();
@@ -717,10 +703,6 @@ QueryExecutor::~QueryExecutor() {
     for (auto& map : result_map_)
         map.clear();
     result_relation_.clear();
-    for (auto& vars : plan_) {
-        for (auto& var : vars.second)
-            var->candidates.clear();
-    }
 }
 
 std::vector<std::pair<uint, Position>> QueryExecutor::MappingVariable(const std::vector<std::string>& variables) {

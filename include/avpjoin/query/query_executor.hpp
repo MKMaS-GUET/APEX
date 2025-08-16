@@ -18,8 +18,6 @@ using Position = Term::Position;
 
 using TripplePattern = std::vector<std::array<SPARQLParser::Term, 3>>;
 
-using CandidateMap = phmap::flat_hash_map<uint, std::span<uint>>;
-
 class QueryExecutor {
    public:
     struct Variable {
@@ -31,7 +29,7 @@ class QueryExecutor {
 
         Position triple_constant_pos;
 
-        CandidateMap candidates;
+        std::span<uint> pre_retrieve;
 
         int total_set_size;
 
@@ -45,9 +43,14 @@ class QueryExecutor {
 
         Variable();
 
-        Variable(std::string variable, Position position, std::span<uint> candidates);
+        Variable(std::string variable, Position position, std::span<uint> pre_retrieve);
 
-        Variable(std::string variable, Position position, uint triple_constant_id, Position triple_constant_pos);
+        Variable(std::string variable, Position position, uint triple_constant_id, Position triple_constant_pos, std::shared_ptr<IndexRetriever> index);
+
+        std::span<uint> Retrieve(uint key);
+
+       private:
+        std::shared_ptr<IndexRetriever> index_;
     };
 
    private:
@@ -71,8 +74,6 @@ class QueryExecutor {
 
     std::chrono::duration<double, std::milli> query_duration_;
 
-    void RetrieveCandidates(Variable& variable, ResultMap& values);
-
     std::vector<VariableGroup::Group> GetVariableGroup();
 
     std::vector<VariableGroup*> GetResultRelationAndVariableGroup(std::vector<QueryExecutor::Variable*>& vars);
@@ -86,8 +87,8 @@ class QueryExecutor {
                       ResultMap& result);
 
     uint SequentialJoin(std::vector<QueryExecutor::Variable*> vars,
-                      std::vector<VariableGroup*> variable_groups,
-                      ResultMap& result);
+                        std::vector<VariableGroup*> variable_groups,
+                        ResultMap& result);
 
    public:
     QueryExecutor(std::shared_ptr<IndexRetriever> index,
