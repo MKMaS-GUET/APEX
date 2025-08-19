@@ -4,7 +4,6 @@
 #include "avpjoin/parser/sparql_parser.hpp"
 #include "avpjoin/query/query_executor.hpp"
 #include "avpjoin/query/result_generator.hpp"
-#include "avpjoin/server/server.hpp"
 
 namespace avpjoin {
 
@@ -75,10 +74,6 @@ void avpjoin::Query(const std::string& db_path, const std::string& data_file) {
     }
 }
 
-void avpjoin::Server(const std::string& ip, const std::string& port, const std::string& db) {
-    Endpoint e;
-
-    e.start_server(ip, port, db);
-}
+void avpjoin::Server(const std::string& ip, const std::string& port, const std::string& db) {}
 
 }  // namespace avpjoin

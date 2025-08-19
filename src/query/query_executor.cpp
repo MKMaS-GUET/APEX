@@ -510,10 +510,9 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
 
         return local_result_len;
     };
-    // uint num_threads = 1;
-    // 数据量大，使用多线程
-    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 256), static_cast<uint>(16));
-    // std::cout << max_join_cnt << " " << num_threads << std::endl;
+    uint num_threads = 16;
+    // uint num_threads = std::min(static_cast<uint>(max_join_cnt / 256), static_cast<uint>(16));
+    std::cout << max_join_cnt << " " << num_threads << std::endl;
     if (num_threads <= 1)
         return joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
 
