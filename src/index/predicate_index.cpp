@@ -1,9 +1,11 @@
 #include "avpjoin/index/predicate_index.hpp"
-#include "streamvbyte.h"
+
 #include <iostream>
 
-void PredicateIndex::Index::Build(std::vector<std::pair<uint, uint>> &so_pairs) {
-    for (const auto &so : so_pairs) {
+#include "streamvbyte.h"
+
+void PredicateIndex::Index::Build(std::vector<std::pair<uint, uint>>& so_pairs) {
+    for (const auto& so : so_pairs) {
         s_set.push_back(so.first);
         o_set.push_back(so.second);
     }
@@ -62,7 +64,8 @@ PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id)
 }
 
 PredicateIndex::PredicateIndex(std::shared_ptr<phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>> pso,
-                               std::string file_path, uint max_predicate_id)
+                               std::string file_path,
+                               uint max_predicate_id)
     : file_path_(file_path), pso_(pso), max_predicate_id_(max_predicate_id) {}
 
 void PredicateIndex::BuildPredicateIndex() {
@@ -92,19 +95,20 @@ void PredicateIndex::BuildPredicateIndex() {
         threads.emplace_back(std::bind(&PredicateIndex::SubBuildPredicateIndex, this, &task_queue, &task_queue_mutex,
                                        &task_queue_cv, &task_queue_empty));
     }
-    for (auto &t : threads)
+    for (auto& t : threads)
         t.join();
 }
 
-void PredicateIndex::SubBuildPredicateIndex(std::deque<uint> *task_queue, std::mutex *task_queue_mutex,
-                                            std::condition_variable *task_queue_cv,
-                                            std::atomic<bool> *task_queue_empty) {
+void PredicateIndex::SubBuildPredicateIndex(std::deque<uint>* task_queue,
+                                            std::mutex* task_queue_mutex,
+                                            std::condition_variable* task_queue_cv,
+                                            std::atomic<bool>* task_queue_empty) {
     while (true) {
         std::unique_lock<std::mutex> lock(*task_queue_mutex);
         while (task_queue->empty() && !task_queue_empty->load())
             task_queue_cv->wait(lock);
         if (task_queue->empty())
-            break; // No more tasks
+            break;  // No more tasks
 
         uint pid = task_queue->front();
         task_queue->pop_front();
@@ -131,8 +135,8 @@ void PredicateIndex::StorePredicateIndexNoCompress() {
 
     ulong arrays_file_offset = 0;
 
-    std::vector<uint> *ps_set;
-    std::vector<uint> *po_set;
+    std::vector<uint>* ps_set;
+    std::vector<uint>* po_set;
     for (uint pid = 1; pid <= max_predicate_id_; pid++) {
         ps_set = &index_[pid - 1].s_set;
         po_set = &index_[pid - 1].o_set;
@@ -166,14 +170,14 @@ void PredicateIndex::StorePredicateIndex() {
     MMap<uint> predicate_index = MMap<uint>(file_path_ + "predicate_index", predicate_index_file_size_);
 
     ulong total_compressed_size = 0;
-    std::vector<std::pair<uint8_t *, uint>> compressed_ps_set(max_predicate_id_);
-    std::vector<std::pair<uint8_t *, uint>> compressed_po_set(max_predicate_id_);
+    std::vector<std::pair<uint8_t*, uint>> compressed_ps_set(max_predicate_id_);
+    std::vector<std::pair<uint8_t*, uint>> compressed_po_set(max_predicate_id_);
 
-    std::vector<uint> *ps_set;
-    std::vector<uint> *po_set;
-    uint *set_buffer;
+    std::vector<uint>* ps_set;
+    std::vector<uint>* po_set;
+    uint* set_buffer;
     uint buffer_offset;
-    uint8_t *compressed_buffer;
+    uint8_t* compressed_buffer;
     ulong compressed_size;
     uint last;
     for (uint pid = 1; pid <= max_predicate_id_; pid++) {
@@ -225,8 +229,8 @@ void PredicateIndex::StorePredicateIndex() {
             predicate_index_arrays.Write(compressed_po_set[pid - 1].first[i]);
         delete[] compressed_po_set[pid - 1].first;
     }
-    std::vector<std::pair<uint8_t *, uint>>().swap(compressed_ps_set);
-    std::vector<std::pair<uint8_t *, uint>>().swap(compressed_po_set);
+    std::vector<std::pair<uint8_t*, uint>>().swap(compressed_ps_set);
+    std::vector<std::pair<uint8_t*, uint>>().swap(compressed_po_set);
 
     predicate_index.CloseMap();
     predicate_index_arrays.CloseMap();
@@ -244,18 +248,18 @@ void PredicateIndex::Store() {
         StorePredicateIndexNoCompress();
 }
 
-std::span<uint> &PredicateIndex::GetSSet(uint pid) {
+std::span<uint>& PredicateIndex::GetSSet(uint pid) {
     if (ps_sets_[pid - 1].size() == 0) {
         if (compress_predicate_index_) {
             uint s_array_offset = predicate_index_mmap_[(pid - 1) * 4];
             uint s_compressed_size = predicate_index_mmap_[(pid - 1) * 4 + 2] - s_array_offset;
 
-            uint8_t *compressed_buffer = new uint8_t[s_compressed_size];
+            uint8_t* compressed_buffer = new uint8_t[s_compressed_size];
             for (uint i = 0; i < s_compressed_size; i++)
                 compressed_buffer[i] = predicate_index_arrays_[s_array_offset + i];
 
             uint reco_size = predicate_index_mmap_[(pid - 1) * 4 + 1];
-            uint *recovdata = new uint[reco_size];
+            uint* recovdata = new uint[reco_size];
 
             streamvbyte_decode(compressed_buffer, recovdata, reco_size);
 
@@ -268,7 +272,7 @@ std::span<uint> &PredicateIndex::GetSSet(uint pid) {
             uint s_array_offset = predicate_index_mmap_[(pid - 1) * 2];
             uint s_array_size = predicate_index_mmap_[(pid - 1) * 2 + 1] - s_array_offset;
 
-            uint *set = new uint[s_array_size];
+            uint* set = new uint[s_array_size];
             for (uint i = 0; i < s_array_size; i++)
                 set[i] = predicate_index_arrays_no_compress_[s_array_offset + i];
 
@@ -278,7 +282,7 @@ std::span<uint> &PredicateIndex::GetSSet(uint pid) {
     return ps_sets_[pid - 1];
 };
 
-std::span<uint> &PredicateIndex::GetOSet(uint pid) {
+std::span<uint>& PredicateIndex::GetOSet(uint pid) {
     if (po_sets_[pid - 1].size() == 0) {
         if (compress_predicate_index_) {
             uint o_array_offset = predicate_index_mmap_[(pid - 1) * 4 + 2];
@@ -288,12 +292,12 @@ std::span<uint> &PredicateIndex::GetOSet(uint pid) {
             else
                 o_compressed_size = predicate_index_arrays_.size_ - o_array_offset;
 
-            uint8_t *compressed_buffer = new uint8_t[o_compressed_size];
+            uint8_t* compressed_buffer = new uint8_t[o_compressed_size];
             for (uint i = 0; i < o_compressed_size; i++)
                 compressed_buffer[i] = predicate_index_arrays_[o_array_offset + i];
 
             uint reco_size = predicate_index_mmap_[(pid - 1) * 4 + 3];
-            uint *recovdata = new uint[reco_size];
+            uint* recovdata = new uint[reco_size];
             streamvbyte_decode(compressed_buffer, recovdata, reco_size);
 
             for (uint i = 1; i < reco_size; i++)
@@ -308,7 +312,7 @@ std::span<uint> &PredicateIndex::GetOSet(uint pid) {
             else
                 o_array_size = predicate_index_mmap_.size_ / 4 - o_array_offset;
 
-            uint *set = new uint[o_array_size];
+            uint* set = new uint[o_array_size];
             for (uint i = 0; i < o_array_size; i++)
                 set[i] = predicate_index_arrays_no_compress_[o_array_offset + i];
 

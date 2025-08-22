@@ -1,15 +1,16 @@
 #include <avpjoin/avpjoin.hpp>
+
 #include "exec/args_parser.hpp"
 
 void Build(const std::unordered_map<std::string, std::string>& arguments) {
     std::string db_name = arguments.at("path");
     std::string data_file = arguments.at("file");
-    avpjoin::avpjoin::Create(db_name, data_file);
+    avpjoin::AVPJoin::Create(db_name, data_file);
 }
 
 void Query(const std::unordered_map<std::string, std::string>& arguments) {
     std::string db_path;
-    std::string sparql_file;
+    std::string query_path;
     if (arguments.count("path")) {
         db_path = arguments.at("path");
         if (db_path.find("/") == std::string::npos)
@@ -17,25 +18,24 @@ void Query(const std::unordered_map<std::string, std::string>& arguments) {
     }
 
     if (arguments.count("file"))
-        sparql_file = arguments.at("file");
+        query_path = arguments.at("file");
 
-    avpjoin::avpjoin::Query(db_path, sparql_file);
+    avpjoin::AVPJoin::Query(db_path, query_path);
 }
 
-void Server(const std::unordered_map<std::string, std::string>& arguments) {
-    std::string ip = "0.0.0.0";
-    if (arguments.count("ip"))
-        ip = arguments.at("ip");
-
-    std::string db_path = arguments.at("path");
+void Train(const std::unordered_map<std::string, std::string>& arguments) {
+    std::string db_path;
+    std::string query_path;
     if (arguments.count("path")) {
         db_path = arguments.at("path");
         if (db_path.find("/") == std::string::npos)
             db_path = "./DB_DATA_ARCHIVE/" + db_path;
     }
 
-    std::string port = arguments.at("port");
-    avpjoin::avpjoin::Server(ip, port, db_path);
+    if (arguments.count("file"))
+        query_path = arguments.at("file");
+
+    avpjoin::AVPJoin::Train(db_path, query_path);
 }
 
 struct EnumClassHash {
@@ -51,7 +51,7 @@ std::unordered_map<ArgsParser::CommandT, void (*)(const std::unordered_map<std::
 int main(int argc, char** argv) {
     selector = {{ArgsParser::CommandT::kBuild, &Build},
                 {ArgsParser::CommandT::kQuery, &Query},
-                {ArgsParser::CommandT::kServer, &Server}};
+                {ArgsParser::CommandT::kTrain, &Train}};
 
     auto parser = ArgsParser();
     auto command = parser.Parse(argc, argv);

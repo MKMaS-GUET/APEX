@@ -8,8 +8,6 @@ class ResultGenerator {
 
     bool at_end_ = false;
 
-    uint limit_;
-
     std::shared_ptr<std::vector<std::vector<uint>>> results_;
 
     std::vector<ResultMap>* result_map_;
@@ -24,6 +22,16 @@ class ResultGenerator {
 
     std::vector<uint> candidate_idx_;
 
+    std::vector<std::string> var_print_order_;
+
+    SPARQLParser::ProjectModifier modifier_;
+
+    std::vector<std::pair<uint, Position>> var_priorty_positon_;
+
+    uint variable_count_;
+
+    uint limit_;
+
     void Up();
 
     void Down();
@@ -37,13 +45,11 @@ class ResultGenerator {
    public:
     ResultGenerator() = default;
 
-    ResultGenerator(std::vector<ResultMap>& results,
-                    std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
-                    uint limit);
+    ResultGenerator(QueryExecutor& executor, SPARQLParser& parser);
 
     ~ResultGenerator();
 
-    uint PrintResult(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser);
+    uint PrintResult(IndexRetriever& index);
 
     std::shared_ptr<std::vector<std::vector<uint>>> results();
 };

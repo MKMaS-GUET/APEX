@@ -1,4 +1,5 @@
 #include "avpjoin/query/variable_group.hpp"
+
 #include <execution>
 #include <iostream>
 

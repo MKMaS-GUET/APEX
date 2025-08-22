@@ -1,7 +1,8 @@
 #include "avpjoin/dictionary/dictionary_builder.hpp"
+
 #include "avpjoin/utils/vbyte.hpp"
 
-DictionaryBuilder::DictionaryBuilder(std::string &dict_path, std::string &file_path)
+DictionaryBuilder::DictionaryBuilder(std::string& dict_path, std::string& file_path)
     : dict_path_(dict_path), file_path_(file_path) {}
 
 void DictionaryBuilder::Init() {
@@ -65,10 +66,12 @@ void DictionaryBuilder::BuildDict() {
     fin.close();
 }
 
-void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint> &map, std::ofstream &dict_out,
-                                          std::string nodes_path, uint management_file_offset) {
+void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
+                                          std::ofstream& dict_out,
+                                          std::string nodes_path,
+                                          uint management_file_offset) {
     // hash -> (id, p_str)
-    phmap::btree_map<std::size_t, std::pair<uint, const std::string *>> hash2id;
+    phmap::btree_map<std::size_t, std::pair<uint, const std::string*>> hash2id;
     phmap::flat_hash_map<uint, std::vector<std::string>> conflicts;
     ulong size = 0;
     ulong str_len = 0;
@@ -92,7 +95,7 @@ void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint> &map, std:
         }
     }
 
-    uint *id2offset;
+    uint* id2offset;
     uint id2offset_size;
     if (size < UINT_MAX) {
         id2offset_size = map.size();
@@ -133,7 +136,7 @@ void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint> &map, std:
         ids.Write(it->second.first);
     ids.CloseMap();
 
-    phmap::btree_map<std::size_t, std::pair<uint, const std::string *>>().swap(hash2id);
+    phmap::btree_map<std::size_t, std::pair<uint, const std::string*>>().swap(hash2id);
 
     if (conflicts.size() != 0) {
         std::cout << "conflict" << std::endl;
@@ -159,8 +162,8 @@ void DictionaryBuilder::SaveDict(uint max_threads) {
     t2.join();
     t3.join();
 
-    std::vector<const std::string *> predicates(predicates_.size() + 1);
-    for (auto &p_pair : predicates_)
+    std::vector<const std::string*> predicates(predicates_.size() + 1);
+    for (auto& p_pair : predicates_)
         predicates[p_pair.second] = &p_pair.first;
     for (uint pid = 1; pid <= predicates_.size(); pid++)
         predicate_out.write((*predicates[pid] + "\n").c_str(), static_cast<long>(predicates[pid]->size() + 1));
@@ -201,7 +204,7 @@ void DictionaryBuilder::Build() {
     menagement_data_.CloseMap();
 }
 
-void DictionaryBuilder::EncodeRDF(hash_map<uint, std::vector<std::pair<uint, uint>>> &pso) {
+void DictionaryBuilder::EncodeRDF(hash_map<uint, std::vector<std::pair<uint, uint>>>& pso) {
     std::cout << "encoding rdf." << std::endl;
 
     uint sid, pid, oid;

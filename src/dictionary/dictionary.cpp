@@ -1,7 +1,8 @@
 #include "avpjoin/dictionary/dictionary.hpp"
+
 #include "avpjoin/utils/vbyte.hpp"
 
-bool Dictionary::LoadPredicate(std::vector<std::string> &id2predicate, hash_map<std::string, uint> &predicate2id) {
+bool Dictionary::LoadPredicate(std::vector<std::string>& id2predicate, hash_map<std::string, uint>& predicate2id) {
     std::ifstream predicate_in(dict_path_ + "/predicates", std::ofstream::out | std::ofstream::binary);
     std::string predicate;
     uint id = 1;
@@ -16,7 +17,7 @@ bool Dictionary::LoadPredicate(std::vector<std::string> &id2predicate, hash_map<
 
 Dictionary::Dictionary() {}
 
-Dictionary::Dictionary(std::string &dict_path) : dict_path_(dict_path) {
+Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     std::string file_path = dict_path_ + "/subjects/hash2id";
     subject_hashes_ = MMap<std::size_t>(file_path);
     subject_ids_ = MMap<uint>(file_path);
@@ -37,7 +38,7 @@ Dictionary::Dictionary(std::string &dict_path) : dict_path_(dict_path) {
     id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
     LoadPredicate(id2predicate_, predicate2id_);
 
-    auto process_id2entity = [&](ulong type, std::string file_name, std::variant<Node<uint>, Node<ulong>> &id2entity) {
+    auto process_id2entity = [&](ulong type, std::string file_name, std::variant<Node<uint>, Node<ulong>>& id2entity) {
         if (type == 32)
             id2entity = Node<uint>(dict_path_ + file_name);
         else
@@ -70,7 +71,7 @@ Dictionary::Dictionary(std::string &dict_path) : dict_path_(dict_path) {
         uint end = (i + 1) * batch_size;
         threads.emplace_back(std::thread([start, end, &build_cache]() { build_cache(start, end); }));
     }
-    for (auto &t : threads)
+    for (auto& t : threads)
         t.join();
 
     menagement_data.CloseMap();
@@ -94,7 +95,7 @@ long Dictionary::binarySearch(MMap<std::size_t> arr, long length, std::size_t ta
     return -1;
 }
 
-uint Dictionary::Find(Map map, const std::string &str) {
+uint Dictionary::Find(Map map, const std::string& str) {
     hash_map<std::string, uint>::iterator it;
     if (map == Map::kPredicateMap) {
         it = predicate2id_.find(str);
@@ -119,7 +120,7 @@ uint Dictionary::Find(Map map, const std::string &str) {
     return id;
 }
 
-uint Dictionary::FindInMaps(uint cnt, Map map, const std::string &str) {
+uint Dictionary::FindInMaps(uint cnt, Map map, const std::string& str) {
     uint ret;
     if (shared_cnt_ > cnt) {
         ret = Find(kSharedMap, str);
@@ -149,7 +150,7 @@ void Dictionary::Close() {
     shared_ids_.CloseMap();
 }
 
-const char *Dictionary::ID2String(uint id, SPARQLParser::Term::Position pos) {
+const char* Dictionary::ID2String(uint id, SPARQLParser::Term::Position pos) {
     if (pos == SPARQLParser::Term::Position::kPredicate) {
         return id2predicate_[id].c_str();
     }
@@ -160,40 +161,51 @@ const char *Dictionary::ID2String(uint id, SPARQLParser::Term::Position pos) {
     }
 
     switch (pos) {
-    case SPARQLParser::Term::Position::kSubject:
-        return (std::holds_alternative<Node<uint>>(id2subject_)) ? std::get<Node<uint>>(id2subject_)[id - shared_cnt_]
-                                                                 : std::get<Node<ulong>>(id2subject_)[id - shared_cnt_];
-    case SPARQLParser::Term::Position::kObject:
-        return (std::holds_alternative<Node<uint>>(id2object_))
-                   ? std::get<Node<uint>>(id2object_)[id - shared_cnt_ - subject_cnt_]
-                   : std::get<Node<ulong>>(id2object_)[id - shared_cnt_ - subject_cnt_];
-    default:
-        break;
+        case SPARQLParser::Term::Position::kSubject:
+            return (std::holds_alternative<Node<uint>>(id2subject_))
+                       ? std::get<Node<uint>>(id2subject_)[id - shared_cnt_]
+                       : std::get<Node<ulong>>(id2subject_)[id - shared_cnt_];
+        case SPARQLParser::Term::Position::kObject:
+            return (std::holds_alternative<Node<uint>>(id2object_))
+                       ? std::get<Node<uint>>(id2object_)[id - shared_cnt_ - subject_cnt_]
+                       : std::get<Node<ulong>>(id2object_)[id - shared_cnt_ - subject_cnt_];
+        default:
+            break;
     }
     throw std::runtime_error("Unhandled case in ID2String");
 }
 
-uint Dictionary::String2ID(const std::string &str, SPARQLParser::Term::Position pos) {
+uint Dictionary::String2ID(const std::string& str, SPARQLParser::Term::Position pos) {
     switch (pos) {
-    case SPARQLParser::Term::Position::kSubject: // subject
-        return FindInMaps(subject_cnt_, kSubjectMap, str);
-    case SPARQLParser::Term::Position::kPredicate: { // predicate
-        return Find(kPredicateMap, str);
-    }
-    case SPARQLParser::Term::Position::kObject: // object
-        return FindInMaps(object_cnt_, kObjectMap, str);
-    default:
-        break;
+        case SPARQLParser::Term::Position::kSubject:  // subject
+            return FindInMaps(subject_cnt_, kSubjectMap, str);
+        case SPARQLParser::Term::Position::kPredicate: {  // predicate
+            return Find(kPredicateMap, str);
+        }
+        case SPARQLParser::Term::Position::kObject:  // object
+            return FindInMaps(object_cnt_, kObjectMap, str);
+        default:
+            break;
     }
     return 0;
 }
 
-uint Dictionary::subject_cnt() { return subject_cnt_; }
+uint Dictionary::subject_cnt() {
+    return subject_cnt_;
+}
 
-uint Dictionary::predicate_cnt() { return predicate_cnt_; }
+uint Dictionary::predicate_cnt() {
+    return predicate_cnt_;
+}
 
-uint Dictionary::object_cnt() { return object_cnt_; }
+uint Dictionary::object_cnt() {
+    return object_cnt_;
+}
 
-uint Dictionary::shared_cnt() { return shared_cnt_; }
+uint Dictionary::shared_cnt() {
+    return shared_cnt_;
+}
 
-uint Dictionary::max_id() { return shared_cnt_ + subject_cnt_ + object_cnt_; };
+uint Dictionary::max_id() {
+    return shared_cnt_ + subject_cnt_ + object_cnt_;
+};

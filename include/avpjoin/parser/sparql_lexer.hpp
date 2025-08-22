@@ -4,7 +4,7 @@
 #include <string>
 
 class SPARQLLexer {
-  public:
+   public:
     enum TokenT {
         kNone,
         kError,
@@ -36,7 +36,7 @@ class SPARQLLexer {
         kGreaterOrEq
     };
 
-  private:
+   private:
     std::string raw_sparql_string_;
     std::string::const_iterator current_pos_;
     // token 的第一个字符位置
@@ -46,20 +46,20 @@ class SPARQLLexer {
     TokenT PutBack_;
     bool is_token_finish_;
 
-    inline bool IsLegalNumericalCharacter(const char &curr) { return '0' <= curr && curr <= '9'; }
+    inline bool IsLegalNumericalCharacter(const char& curr) { return '0' <= curr && curr <= '9'; }
 
-    inline bool IsLegalIdentifierCharacter(const char &curr) {
+    inline bool IsLegalIdentifierCharacter(const char& curr) {
         return ('0' <= curr && curr <= '9') || ('a' <= curr && curr <= 'z') || ('A' <= curr && curr <= 'Z') ||
                ('_' == curr);
     }
 
-    inline bool IsLegalVariableCharacter(const char &curr) { return IsLegalIdentifierCharacter(curr); }
+    inline bool IsLegalVariableCharacter(const char& curr) { return IsLegalIdentifierCharacter(curr); }
 
-    inline bool IsLegalIRIInnerCharacter(const char &curr) {
+    inline bool IsLegalIRIInnerCharacter(const char& curr) {
         return '\t' != curr && ' ' != curr && '\n' != curr && '\r' != curr;
     }
 
-  public:
+   public:
     explicit SPARQLLexer(std::string raw_sparql_string);
 
     ~SPARQLLexer() = default;
@@ -72,10 +72,10 @@ class SPARQLLexer {
 
     [[nodiscard]] std::string GetIRIValue() const;
 
-    bool IsKeyword(const char *word);
+    bool IsKeyword(const char* word);
 
     // 当下一次调用 GetNextTokenType 时，会直接返回 PutBack_
     void PutBack(TokenT value);
 };
 
-#endif // SPARQL_LEXER_HPP
+#endif  // SPARQL_LEXER_HPP

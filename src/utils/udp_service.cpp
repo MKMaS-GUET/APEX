@@ -35,7 +35,7 @@ void UDPService::sendMessage(const std::string& message) {
 }
 
 std::string UDPService::receiveMessage() {
-    char buffer[1024];
+    char buffer[512];
     memset(buffer, 0, sizeof(buffer));
     int recv_len = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, nullptr, nullptr);
     buffer[recv_len] = '\0';

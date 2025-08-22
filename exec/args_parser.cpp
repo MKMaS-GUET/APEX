@@ -7,8 +7,7 @@ void ArgsParser::Build(const std::unordered_map<std::string, std::string>& args)
     }
     if ((!args.count("-d") && !args.count("--database")) || (!args.count("-f") && !args.count("--file"))) {
         std::cerr << "usage: epei build [-d DATABASE] [-f FILE]" << std::endl;
-        std::cerr << "epei: error: the following arguments are required: [-d DATABASE] [-f FILE]"
-                  << std::endl;
+        std::cerr << "epei: error: the following arguments are required: [-d DATABASE] [-f FILE]" << std::endl;
         exit(1);
     }
     arguments_[arg_db_path_] = args.count("-d") ? args.at("-d") : args.at("--database");
@@ -29,40 +28,29 @@ void ArgsParser::Query(const std::unordered_map<std::string, std::string>& args)
         arguments_[arg_file_] = args.at("--file");
     else
         arguments_[arg_file_] = "";
-
-    size_t default_thread_num = std::thread::hardware_concurrency();
-    if (args.count("-t") && default_thread_num >= std::stoull(args.at("-t")))
-        arguments_[arg_thread_num_] = args.at("-t");
-    else
-        arguments_[arg_thread_num_] = std::to_string(default_thread_num);
 }
 
-void ArgsParser::Server(const std::unordered_map<std::string, std::string>& args) {
-    if (args.empty() || args.count("-h") || args.count("--help")) {
+void ArgsParser::Train(const std::unordered_map<std::string, std::string>& args) {
+    if (args.count("-h") || args.count("--help")) {
         std::cout << help_info_ << std::endl;
         exit(1);
     }
-    if ((!args.count("-p") && !args.count("--port"))) {
-        std::cerr << "usage: epei server [--ip IP] [-p PORT]" << std::endl;
-        std::cerr << "epei: error: the following arguments are required: [-p PORT]" << std::endl;
-        exit(1);
-    }
+
     if (args.count("-d"))
         arguments_[arg_db_path_] = args.count("-d") ? args.at("-d") : args.at("--database");
-    if (args.count("--ip"))
-        arguments_[arg_ip_] = args.at("--ip");
-    arguments_[arg_port_] = args.count("-p") ? args.at("-p") : args.at("--port");
-    if (!IsNumber(arguments_[arg_port_])) {
-        std::cerr << "epei: error: the argument [-p PORT] requires a number, but got "
-                  << arguments_[arg_port_] << std::endl;
-        exit(1);
-    }
+
+    if (args.count("-f"))
+        arguments_[arg_file_] = args.at("-f");
+    else if (args.count("--file"))
+        arguments_[arg_file_] = args.at("--file");
+    else
+        arguments_[arg_file_] = "";
 }
 
 ArgsParser::CommandT ArgsParser::Parse(int argc, char** argv) {
     if (argc == 1) {
         std::cout << help_info_ << std::endl;
-        std::cerr << "epei: error: the following arguments are required: command" << std::endl;
+        std::cerr << "error: the following arguments are required: command" << std::endl;
         exit(1);
     }
 
@@ -75,14 +63,14 @@ ArgsParser::CommandT ArgsParser::Parse(int argc, char** argv) {
 
     if (!position_.count(argv1)) {
         std::cout << help_info_ << std::endl;
-        std::cerr << "epei: error: the following arguments are required: command" << std::endl;
+        std::cerr << "error: the following arguments are required: command" << std::endl;
         exit(1);
     }
 
     std::unordered_map<std::string, std::string> args;
     for (int i = 2; i < argc; i += 2) {
         if (argv[i][0] != '-') {
-            std::cerr << "hinDB: error: unrecognized arguments: " << argv[i] << std::endl;
+            std::cerr << "error: unrecognized arguments: " << argv[i] << std::endl;
             exit(1);
         }
         if (std::strcmp(argv[i], "-h") == 0 || std::strcmp(argv[i], "--help") == 0) {
@@ -93,7 +81,7 @@ ArgsParser::CommandT ArgsParser::Parse(int argc, char** argv) {
             continue;
         }
         if (i + 1 >= argc || argv[i + 1][0] == '-') {
-            std::cerr << "hinDB: error: argument " << argv[i] << ": expected one argument" << std::endl;
+            std::cerr << "error: argument " << argv[i] << ": expected one argument" << std::endl;
             exit(1);
         }
         args.emplace(argv[i], argv[i + 1]);

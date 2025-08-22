@@ -1,12 +1,13 @@
 #ifndef INDEX_BUILDER_HPP
 #define INDEX_BUILDER_HPP
 
+#include <parallel_hashmap/btree.h>
+#include <parallel_hashmap/phmap.h>
+
 #include <filesystem>
 #include <future>
 #include <iostream>
 #include <mutex>
-#include <parallel_hashmap/btree.h>
-#include <parallel_hashmap/phmap.h>
 #include <queue>
 #include <string>
 #include <vector>
@@ -62,7 +63,7 @@ class IndexBuilder {
      * @param c_set_size A vector to store size for characteristic sets.
      * @param permutation The RDF triple permutation to build.
      */
-    void BuildCharacteristicSet(std::vector<uint> &c_set_id, std::vector<uint> &c_set_size, Permutation permutation);
+    void BuildCharacteristicSet(std::vector<uint>& c_set_id, std::vector<uint>& c_set_size, Permutation permutation);
 
     /**
      * @brief Builds the entity sets for the given permutation.
@@ -71,10 +72,12 @@ class IndexBuilder {
      * @param entity_set entity -> predicate_offset -> o/s set.
      * @param permutation The RDF triple permutation to build.
      */
-    void BuildEntitySets(PredicateIndex &predicate_index, std::vector<uint> &c_set_size,
-                         std::vector<std::vector<std::vector<uint>>> &entity_set, Permutation permutation);
+    void BuildEntitySets(PredicateIndex& predicate_index,
+                         std::vector<uint>& c_set_size,
+                         std::vector<std::vector<std::vector<uint>>>& entity_set,
+                         Permutation permutation);
 
-  public:
+   public:
     /**
      * @brief Constructs an IndexBuilder object.
      * @param db_name The name of the database.

@@ -2,13 +2,15 @@
 #define MMAP_HPP
 
 #include <fcntl.h>
-#include <fstream>
-#include <string>
 #include <sys/mman.h>
 #include <unistd.h>
 
-template <typename T> class MMap {
-  private:
+#include <fstream>
+#include <string>
+
+template <typename T>
+class MMap {
+   private:
     void Create(std::string path, ulong size) {
         fd_ = open((path).c_str(), O_RDWR | O_CREAT, (mode_t)0600);
 
@@ -23,7 +25,7 @@ template <typename T> class MMap {
             exit(1);
         }
 
-        map_ = static_cast<T *>(mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0));
+        map_ = static_cast<T*>(mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0));
         if (map_ == MAP_FAILED) {
             perror("Error mapping file for mmap");
             close(fd_);
@@ -31,11 +33,11 @@ template <typename T> class MMap {
         }
     }
 
-  public:
-    T *map_;
+   public:
+    T* map_;
     int fd_;
     std::string path_;
-    ulong size_; // bytes
+    ulong size_;  // bytes
     ulong offset_;
 
     MMap() {}
@@ -66,7 +68,7 @@ template <typename T> class MMap {
         }
     }
 
-    T &operator[](ulong offset) {
+    T& operator[](ulong offset) {
         if (offset >= 0 && offset < size_ / sizeof(T)) {
             return map_[offset];
         }

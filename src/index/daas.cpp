@@ -1,10 +1,14 @@
 #include "avpjoin/index/daas.hpp"
-#include "avpjoin/utils/bit_operations.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 
-DAAs::Structure::Structure(std::vector<std::vector<uint>> &arrays) { create(arrays); }
+#include "avpjoin/utils/bit_operations.hpp"
+
+DAAs::Structure::Structure(std::vector<std::vector<uint>>& arrays) {
+    create(arrays);
+}
 
 DAAs::Structure::~Structure() {
     delete[] levels;
@@ -12,14 +16,14 @@ DAAs::Structure::~Structure() {
     delete[] array_end;
 }
 
-void DAAs::Structure::create(std::vector<std::vector<uint>> &arrays) {
+void DAAs::Structure::create(std::vector<std::vector<uint>>& arrays) {
     uint level_cnt = 0;
-    for (auto &array : arrays) {
+    for (auto& array : arrays) {
         if (array.size() > level_cnt)
             level_cnt = array.size();
     }
 
-    uint *level_size = (uint *)malloc(sizeof(uint) * level_cnt);
+    uint* level_size = (uint*)malloc(sizeof(uint) * level_cnt);
     for (uint i = 0; i < level_cnt; i++)
         level_size[i] = 0;
 
@@ -31,10 +35,10 @@ void DAAs::Structure::create(std::vector<std::vector<uint>> &arrays) {
         }
     }
 
-    level_end = (char *)malloc((data_cnt + 7) / 8);
-    levels = (uint *)malloc(sizeof(uint) * data_cnt);
-    array_end = (char *)malloc((data_cnt + 7) / 8);
-    uint *contB = (uint *)malloc(sizeof(uint) * level_cnt + 1);
+    level_end = (char*)malloc((data_cnt + 7) / 8);
+    levels = (uint*)malloc(sizeof(uint) * data_cnt);
+    array_end = (char*)malloc((data_cnt + 7) / 8);
+    uint* contB = (uint*)malloc(sizeof(uint) * level_cnt + 1);
 
     for (uint i = 0; i < (data_cnt + 7) / 8; i++) {
         level_end[i] = 0;
@@ -67,11 +71,11 @@ DAAs::DAAs(std::string file_path) : file_path_(file_path) {}
 
 DAAs::DAAs(std::string file_path, uint daa_levels_width) : file_path_(file_path), daa_levels_width_(daa_levels_width) {}
 
-void DAAs::Preprocess(std::vector<std::vector<std::vector<uint>>> &entity_set) {
+void DAAs::Preprocess(std::vector<std::vector<std::vector<uint>>>& entity_set) {
     uint max = 0;
     for (uint id = 1; id <= entity_set.size(); id++) {
         for (uint p = 0; p < entity_set[id - 1].size(); p++) {
-            auto &set = entity_set[id - 1][p];
+            auto& set = entity_set[id - 1][p];
             std::sort(set.begin(), set.end());
             set.erase(std::unique(set.begin(), set.end()), set.end());
 
@@ -87,10 +91,10 @@ void DAAs::Preprocess(std::vector<std::vector<std::vector<uint>>> &entity_set) {
         }
     }
 
-    daa_levels_width_ = std::floor(std::log2(max) + 1);
+    daa_levels_width_ = std::bit_width(max);
 }
 
-void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>> &entity_set) {
+void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set) {
     ulong entity_cnt = entity_set.size();
 
     uint levels_size = 0;
@@ -100,7 +104,7 @@ void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>> &entity_set) {
                 levels_size += entity_set[id - 1][p].size();
         }
     }
-    uint daa_offset_width = std::floor(std::log2(levels_size) + 1) + 1;
+    uint daa_offset_width = std::bit_width(levels_size) + 1;
 
     ulong file_size;
     file_size = ulong(levels_size * ulong(daa_levels_width_) + 7ul) / 8ul;
@@ -167,12 +171,14 @@ void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>> &entity_set) {
     daa_array_end_.CloseMap();
 }
 
-void DAAs::Build(std::vector<std::vector<std::vector<uint>>> &entity_set) {
+void DAAs::Build(std::vector<std::vector<std::vector<uint>>>& entity_set) {
     Preprocess(entity_set);
     BuildDAAs(entity_set);
 }
 
-std::vector<ulong> &DAAs::daa_offsets() { return daa_offsets_; }
+std::vector<ulong>& DAAs::daa_offsets() {
+    return daa_offsets_;
+}
 
 void DAAs::Load() {
     daa_levels_ = MMap<uint>(file_path_ + "daa_levels");
@@ -180,8 +186,8 @@ void DAAs::Load() {
     daa_array_end_ = MMap<char>(file_path_ + "daa_array_end");
 }
 
-std::span<uint> DAAs::AccessDAAAllArrays(uint daa_offset, uint daa_size, std::vector<std::span<uint>> &offset2id) {
-    std::vector<uint> *result = new std::vector<uint>();
+std::span<uint> DAAs::AccessDAAAllArrays(uint daa_offset, uint daa_size, std::vector<std::span<uint>>& offset2id) {
+    std::vector<uint>* result = new std::vector<uint>();
 
     if (daa_size == 0) {
         for (uint i = 0; i < offset2id.size(); i++)
@@ -265,8 +271,8 @@ uint DAAs::AccessLevels(ulong offset) {
     return bitop::AccessBitSequence(daa_levels_, bit_start, daa_levels_width_);
 }
 
-std::span<uint> DAAs::AccessDAA(uint daa_offset, uint daa_size, std::span<uint> &offset2id, uint index) {
-    std::vector<uint> *result = new std::vector<uint>;
+std::span<uint> DAAs::AccessDAA(uint daa_offset, uint daa_size, std::span<uint>& offset2id, uint index) {
+    std::vector<uint>* result = new std::vector<uint>;
 
     if (daa_size == 0) {
         result->push_back(offset2id[daa_offset]);
@@ -303,7 +309,9 @@ std::span<uint> DAAs::AccessDAA(uint daa_offset, uint daa_size, std::span<uint> 
     return std::span<uint>(*result);
 }
 
-uint DAAs::daa_levels_width() { return daa_levels_width_; }
+uint DAAs::daa_levels_width() {
+    return daa_levels_width_;
+}
 
 void DAAs::Close() {
     daa_levels_.CloseMap();

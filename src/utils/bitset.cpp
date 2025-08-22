@@ -2,9 +2,13 @@
 
 Bitset::Bitset() {};
 
-Bitset::Bitset(ulong initial_size) : bit_size_(initial_size) { bits_.resize((initial_size + 63) / 64, 0); }
+Bitset::Bitset(ulong initial_size) : bit_size_(initial_size) {
+    bits_.resize((initial_size + 63) / 64, 0);
+}
 
-Bitset::~Bitset() { std::vector<unsigned long>().swap(bits_); }
+Bitset::~Bitset() {
+    std::vector<unsigned long>().swap(bits_);
+}
 
 bool Bitset::Get(ulong pos) {
     if (pos >= bit_size_)
@@ -29,4 +33,6 @@ void Bitset::Resize(ulong new_size) {
     bits_.resize((new_size + 63) / 64, 0);
 }
 
-ulong Bitset::Size() const { return bit_size_; }
+ulong Bitset::Size() const {
+    return bit_size_;
+}

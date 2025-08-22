@@ -1,17 +1,19 @@
 #ifndef INDEX_RETRIEVER_HPP
 #define INDEX_RETRIEVER_HPP
 
+#include <limits.h>
+
+#include <fstream>
+#include <iostream>
+#include <span>
+#include <thread>
+#include <vector>
+
 #include "avpjoin/dictionary/dictionary.hpp"
 #include "avpjoin/index/characteristic_set.hpp"
 #include "avpjoin/index/cs_daa_map.hpp"
 #include "avpjoin/index/daas.hpp"
 #include "avpjoin/index/predicate_index.hpp"
-#include <fstream>
-#include <iostream>
-#include <limits.h>
-#include <span>
-#include <thread>
-#include <vector>
 
 /**
  * @class IndexRetriever
@@ -44,7 +46,7 @@ class IndexRetriever {
      */
     ulong FileSize(std::string file_name);
 
-  public:
+   public:
     /**
      * @brief Default constructor for IndexRetriever.
      */
@@ -67,28 +69,28 @@ class IndexRetriever {
      * @param pos The position of the term in the SPARQL triple pattern.
      * @return The string representation of the ID.
      */
-    const char *ID2String(uint id, SPARQLParser::Term::Position pos);
+    const char* ID2String(uint id, SPARQLParser::Term::Position pos);
 
     /**
      * @brief Converts a term in a SPARQL triple pattern to its corresponding ID.
      * @param term The SPARQL term.
      * @return The ID of the term.
      */
-    uint Term2ID(const SPARQLParser::Term &term);
+    uint Term2ID(const SPARQLParser::Term& term);
 
     /**
      * @brief Retrieves the set of subjects for a given predicate ID.
      * @param pid The predicate ID.
      * @return A span of subject IDs.
      */
-    std::span<uint> GetSSet(uint pid);
+    std::span<uint> GetPreSSet(uint pid);
 
     /**
      * @brief Retrieves the set of objects for a given predicate ID.
      * @param pid The predicate ID.
      * @return A span of object IDs.
      */
-    std::span<uint> GetOSet(uint pid);
+    std::span<uint> GetPreOSet(uint pid);
 
     /**
      * @brief Retrieves the set of predicates for a given subject ID.

@@ -1,14 +1,16 @@
-#include <filesystem>
-#include <fstream>
-#include <iostream>
 #include <malloc.h>
 #include <parallel_hashmap/btree.h>
 #include <parallel_hashmap/phmap.h>
+
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <thread>
 
 #include "avpjoin/utils/mmap.hpp"
 
-template <typename Key, typename Value> using hash_map = phmap::flat_hash_map<Key, Value>;
+template <typename Key, typename Value>
+using hash_map = phmap::flat_hash_map<Key, Value>;
 
 /**
  * @class DictionaryBuilder
@@ -62,7 +64,9 @@ class DictionaryBuilder {
      * @param hashmap_path The path where the hash map will be saved.
      * @param management_file_offset The offset in the management file for this hash map.
      */
-    void ReassignIDAndSave(hash_map<std::string, uint> &map, std::ofstream &dict_out, std::string hashmap_path,
+    void ReassignIDAndSave(hash_map<std::string, uint>& map,
+                           std::ofstream& dict_out,
+                           std::string hashmap_path,
                            uint management_file_offset);
 
     /**
@@ -72,14 +76,14 @@ class DictionaryBuilder {
      */
     void SaveDict(uint max_threads);
 
-  public:
+   public:
     /**
      * @brief Constructor for the DictionaryBuilder class.
      *
      * @param dict_path The path where the dictionary will be stored.
      * @param file_path The path to the RDF file to be processed.
      */
-    DictionaryBuilder(std::string &dict_path, std::string &file_path);
+    DictionaryBuilder(std::string& dict_path, std::string& file_path);
 
     /**
      * @brief Builds the RDF dictionary.
@@ -95,7 +99,7 @@ class DictionaryBuilder {
      * @param pso A hash map where the key is a predicate ID, and the value is a vector of
      *            pairs containing subject and object IDs.
      */
-    void EncodeRDF(hash_map<uint, std::vector<std::pair<uint, uint>>> &pso);
+    void EncodeRDF(hash_map<uint, std::vector<std::pair<uint, uint>>>& pso);
 
     /**
      * @brief Closes the dictionary builder and releases resources.

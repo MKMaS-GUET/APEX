@@ -1,4 +1,5 @@
 #include "avpjoin/index/index_builder.hpp"
+
 #include "avpjoin/dictionary/dictionary_builder.hpp"
 #include "avpjoin/index/characteristic_set.hpp"
 #include "avpjoin/index/cs_daa_map.hpp"
@@ -32,7 +33,8 @@ IndexBuilder::IndexBuilder(std::string db_name, std::string data_file) {
     pso_ = std::make_shared<hash_map<uint, std::vector<std::pair<uint, uint>>>>();
 }
 
-void IndexBuilder::BuildCharacteristicSet(std::vector<uint> &c_set_id, std::vector<uint> &c_set_size,
+void IndexBuilder::BuildCharacteristicSet(std::vector<uint>& c_set_id,
+                                          std::vector<uint>& c_set_size,
                                           Permutation permutation) {
     uint entity_cnt;
     if (permutation == Permutation::kSPO)
@@ -62,7 +64,7 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<uint> &c_set_id, std::vect
     uint max_id = 0;
     uint present_id;
 
-    std::vector<std::pair<uint8_t *, uint>> compressed_sets;
+    std::vector<std::pair<uint8_t*, uint>> compressed_sets;
     std::vector<uint> original_size;
 
     c_set_id = std::vector<uint>(entity_cnt);
@@ -92,8 +94,10 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<uint> &c_set_id, std::vect
     c_set.Build(compressed_sets, original_size);
 }
 
-void IndexBuilder::BuildEntitySets(PredicateIndex &predicate_index, std::vector<uint> &c_set_size,
-                                   std::vector<std::vector<std::vector<uint>>> &entity_set, Permutation permutation) {
+void IndexBuilder::BuildEntitySets(PredicateIndex& predicate_index,
+                                   std::vector<uint>& c_set_size,
+                                   std::vector<std::vector<std::vector<uint>>>& entity_set,
+                                   Permutation permutation) {
     uint entity_cnt = c_set_size.size();
     // (s, p) or (o, p) 's o/s set
     entity_set.reserve(entity_cnt);
@@ -196,8 +200,8 @@ bool IndexBuilder::Build() {
     diff = end - beg;
     std::cout << "build ops index takes " << diff.count() << " ms." << std::endl;
 
-    std::pair<std::vector<uint> &, std::vector<ulong> &> spo_map = {subject_cs_id, spo_daas.daa_offsets()};
-    std::pair<std::vector<uint> &, std::vector<ulong> &> ops_map = {object_cs_id, ops_daas.daa_offsets()};
+    std::pair<std::vector<uint>&, std::vector<ulong>&> spo_map = {subject_cs_id, spo_daas.daa_offsets()};
+    std::pair<std::vector<uint>&, std::vector<ulong>&> ops_map = {object_cs_id, ops_daas.daa_offsets()};
 
     beg = std::chrono::high_resolution_clock::now();
     CsDaaMap cs_daa_map = CsDaaMap(db_index_path_);

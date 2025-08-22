@@ -2,20 +2,21 @@
 #define AVPJOIN_HPP
 
 #include <string>
+#include <vector>
 
 namespace avpjoin {
 
-class avpjoin {
+class AVPJoin {
    public:
-    avpjoin() = delete;
+    AVPJoin() = delete;
 
-    ~avpjoin() = delete;
+    ~AVPJoin() = delete;
 
     static void Create(const std::string& db_name, const std::string& data_file);
 
     static void Query(const std::string& db_path, const std::string& data_file);
 
-    static void Server(const std::string& ip, const std::string& port, const std::string& db);
+    static void Train(const std::string& db_path, const std::string& query_path);
 };
 
 }  // namespace avpjoin

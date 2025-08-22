@@ -1,6 +1,8 @@
 #include "avpjoin/index/characteristic_set.hpp"
-#include "avpjoin/utils/vbyte.hpp"
+
 #include <iostream>
+
+#include "avpjoin/utils/vbyte.hpp"
 
 CharacteristicSet::Trie::Trie() {
     cnt = 0;
@@ -12,7 +14,7 @@ CharacteristicSet::Trie::~Trie() {
     phmap::flat_hash_map<uint, uint>().swap(exist);
 }
 
-uint CharacteristicSet::Trie::Insert(std::vector<uint> &set) {
+uint CharacteristicSet::Trie::Insert(std::vector<uint>& set) {
     uint node_id = 0;
     uint next_id = 0;
 
@@ -31,7 +33,7 @@ uint CharacteristicSet::Trie::Insert(std::vector<uint> &set) {
     return it.first->second;
 }
 
-uint CharacteristicSet::Trie::Find(std::vector<uint> &set) {
+uint CharacteristicSet::Trie::Find(std::vector<uint>& set) {
     uint node_id = 0;
 
     for (auto it = set.begin(); it != set.end(); it++) {
@@ -43,12 +45,12 @@ uint CharacteristicSet::Trie::Find(std::vector<uint> &set) {
     return exist[node_id];
 }
 
-void CharacteristicSet::Trie::Traverse(std::vector<std::vector<uint>> &result) {
+void CharacteristicSet::Trie::Traverse(std::vector<std::vector<uint>>& result) {
     std::vector<uint> path;
     DFS(0, path, result);
 }
 
-void CharacteristicSet::Trie::DFS(uint node_id, std::vector<uint> &path, std::vector<std::vector<uint>> &result) {
+void CharacteristicSet::Trie::DFS(uint node_id, std::vector<uint>& path, std::vector<std::vector<uint>>& result) {
     if (exist[node_id] > 0) {
         result.push_back(path);
     }
@@ -89,8 +91,8 @@ void CharacteristicSet::Load() {
     c_sets.CloseMap();
 }
 
-void CharacteristicSet::Build(std::vector<std::pair<uint8_t *, uint>> &compressed_sets,
-                              std::vector<uint> &original_size) {
+void CharacteristicSet::Build(std::vector<std::pair<uint8_t*, uint>>& compressed_sets,
+                              std::vector<uint>& original_size) {
     uint base = (compressed_sets.size() * 2 + 1) * 4;
 
     ulong compressed_size = 0;
@@ -117,18 +119,18 @@ void CharacteristicSet::Build(std::vector<std::pair<uint8_t *, uint>> &compresse
     c_sets.CloseMap();
 }
 
-std::span<uint> &CharacteristicSet::operator[](uint c_id) {
+std::span<uint>& CharacteristicSet::operator[](uint c_id) {
     c_id -= 1;
     if (sets_[c_id].size() == 0) {
         uint offset = (c_id == 0) ? 0 : offset_size_[c_id - 1].first;
         uint buffer_size = offset_size_[c_id].first - offset;
         uint original_size = offset_size_[c_id].second;
 
-        uint8_t *compressed_buffer = new uint8_t[buffer_size];
+        uint8_t* compressed_buffer = new uint8_t[buffer_size];
         for (uint i = 0; i < buffer_size; i++)
             compressed_buffer[i] = mmap_[base_ + offset + i];
 
-        uint32_t *original_data = Decompress(compressed_buffer, original_size);
+        uint32_t* original_data = Decompress(compressed_buffer, original_size);
         for (uint i = 1; i < original_size; i++)
             original_data[i] += original_data[i - 1];
         sets_[c_id] = std::span<uint>(original_data, original_size);

@@ -1,17 +1,19 @@
 #ifndef CS_DAA_MAP_HPP
 #define CS_DAA_MAP_HPP
 
-#include "avpjoin/utils/mmap.hpp"
-#include <string>
 #include <sys/types.h>
+
+#include <string>
 #include <vector>
+
+#include "avpjoin/utils/mmap.hpp"
 
 /**
  * @class CsDaaMap
  * @brief A class for mapping entity IDs to characteristic set IDs and DAA offsets.
  */
 class CsDaaMap {
-  public:
+   public:
     /**
      * @enum Permutation
      * @brief Enum representing the permutation types for mappings.
@@ -21,7 +23,7 @@ class CsDaaMap {
      */
     enum Permutation { kSPO, kOPS };
 
-  private:
+   private:
     // File path for the mapping data.
     std::string file_path_;
 
@@ -74,7 +76,7 @@ class CsDaaMap {
      */
     uint DAAOffsetOf(uint id, Permutation permutation);
 
-  public:
+   public:
     /**
      * @brief Default constructor for CsDaaMap.
      */
@@ -98,17 +100,23 @@ class CsDaaMap {
      * @param object_cnt Count of objects.
      * @param shared_id_size Count of how many subject ids and object ids are the same.
      */
-    CsDaaMap(std::string file_path, std::pair<uint, uint> cs_id_width, std::pair<uint, uint> daa_offset_width,
-             uint not_shared_cs_id_width, uint not_shared_daa_offset_width, uint shared_cnt, uint subject_cnt,
-             uint object_cnt, uint shared_id_size);
+    CsDaaMap(std::string file_path,
+             std::pair<uint, uint> cs_id_width,
+             std::pair<uint, uint> daa_offset_width,
+             uint not_shared_cs_id_width,
+             uint not_shared_daa_offset_width,
+             uint shared_cnt,
+             uint subject_cnt,
+             uint object_cnt,
+             uint shared_id_size);
 
     /**
      * @brief Builds the CsDaaMap using SPO and OPS mappings.
      * @param spo_map Pair of vectors representing the SPO mapping.
      * @param ops_map Pair of vectors representing the OPS mapping.
      */
-    void Build(std::pair<std::vector<uint> &, std::vector<ulong> &> spo_map,
-               std::pair<std::vector<uint> &, std::vector<ulong> &> ops_map);
+    void Build(std::pair<std::vector<uint>&, std::vector<ulong>&> spo_map,
+               std::pair<std::vector<uint>&, std::vector<ulong>&> ops_map);
 
     /**
      * @brief Retrieves the characteristic set ID for a given ID and permutation.

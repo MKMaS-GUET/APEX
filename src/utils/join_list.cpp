@@ -1,4 +1,5 @@
 #include "avpjoin/utils/join_list.hpp"
+
 #include <iostream>
 
 JoinList::JoinList() {

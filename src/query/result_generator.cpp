@@ -1,30 +1,35 @@
 #include "avpjoin/query/result_generator.hpp"
+
 #include <span>
 
-ResultGenerator::ResultGenerator(std::vector<ResultMap>& result_map,
-                                 std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
-                                 uint limit) {
-    limit_ = limit;
-
+ResultGenerator::ResultGenerator(QueryExecutor& executor, SPARQLParser& parser) {
     variable_id_ = -1;
     at_end_ = false;
 
-    result_map_ = &result_map;
+    result_map_ = &executor.result_map();
 
-    result_map_keys_.resize(result_map.size());
+    result_map_keys_.resize(result_map_->size());
     for (size_t i = 0; i < result_map_->size(); i++)
         result_map_keys_[i].resize(result_map_->at(i).begin()->first.size(), 0);
 
-    result_relation_ = result_relation;
+    result_relation_ = executor.result_relation();
 
     uint size = 1;
-    for (auto& result : result_map)
+    for (auto& result : *result_map_)
         size *= result.size();
     results_ = std::make_shared<std::vector<std::vector<uint>>>();
     results_->reserve(size);
-    current_result_ = std::vector<uint>(result_map.size(), 0);
-    candidate_value_ = std::vector<std::span<uint>>(result_map.size());
-    candidate_idx_ = std::vector<uint>(result_map.size(), 0);
+    current_result_ = std::vector<uint>(result_map_->size(), 0);
+    candidate_value_ = std::vector<std::span<uint>>(result_map_->size());
+    candidate_idx_ = std::vector<uint>(result_map_->size(), 0);
+
+    var_print_order_ = parser.ProjectVariables();
+    modifier_ = parser.project_modifier();
+
+    var_priorty_positon_ = executor.MappingVariable(var_print_order_);
+    variable_count_ = executor.variable_cnt();
+
+    limit_ = parser.Limit();
 }
 
 ResultGenerator::~ResultGenerator() {
@@ -90,7 +95,7 @@ bool ResultGenerator::UpdateCurrentResult() {
     return false;
 }
 
-uint ResultGenerator::PrintResult(QueryExecutor& executor, IndexRetriever& index, SPARQLParser& parser) {
+uint ResultGenerator::PrintResult(IndexRetriever& index) {
     while (true) {
         if (at_end_) {
             if (variable_id_ == 0)
@@ -100,39 +105,32 @@ uint ResultGenerator::PrintResult(QueryExecutor& executor, IndexRetriever& index
         } else {
             if (variable_id_ == int(result_map_->size() - 1)) {
                 results_->push_back(current_result_);
-                // if (results_.size() >= limit_)
-                //     break;
+                if (results_->size() >= limit_)
+                    break;
                 Next();
             } else {
                 Down();
             }
         }
     }
-
-    const auto& modifier = parser.project_modifier();
     // project_variables 是要输出的变量顺序
     // 而 result 的变量顺序是计划生成中的变量排序
     // 所以要获取每一个要输出的变量在 result 中的位置
-    std::vector<std::string> print_var_order = parser.ProjectVariables();
-    for (uint i = 0; i < print_var_order.size(); i++)
-        std::cout << print_var_order[i] << " ";
+    for (uint i = 0; i < var_print_order_.size(); i++)
+        std::cout << var_print_order_[i] << " ";
     std::cout << std::endl;
-
-    std::vector<std::pair<uint, Position>> prior_pos = executor.MappingVariable(print_var_order);
 
     auto last = results_->end();
 
     uint cnt = 0;
-    if (modifier.modifier_type == SPARQLParser::ProjectModifier::Distinct) {
-        uint variable_cnt = executor.variable_cnt();
-
-        if (variable_cnt != prior_pos.size()) {
+    if (modifier_.modifier_type == SPARQLParser::ProjectModifier::Distinct) {
+        if (variable_count_ != var_priorty_positon_.size()) {
             std::vector<uint> not_projection_variable_index;
-            for (uint i = 0; i < variable_cnt; i++)
+            for (uint i = 0; i < variable_count_; i++)
                 not_projection_variable_index.push_back(i);
 
             std::set<uint> indexes_to_remove;
-            for (const auto& [prior, pos] : prior_pos)
+            for (const auto& [prior, pos] : var_priorty_positon_)
                 indexes_to_remove.insert(prior);
 
             not_projection_variable_index.erase(
@@ -151,7 +149,7 @@ uint ResultGenerator::PrintResult(QueryExecutor& executor, IndexRetriever& index
                            // 判断两个列表 a 和 b 是否相同，
                            [&](const std::vector<uint>& a, const std::vector<uint>& b) {
                                // std::all_of 可以用来判断数组中的值是否都满足一个条件
-                               return std::all_of(prior_pos.begin(), prior_pos.end(),
+                               return std::all_of(var_priorty_positon_.begin(), var_priorty_positon_.end(),
                                                   // 判断依据是，列表中的每一个元素都相同
                                                   [&](std::pair<uint, Position> pri_pos) {
                                                       return a[pri_pos.first] == b[pri_pos.first];

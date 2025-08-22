@@ -15,7 +15,7 @@ class ArgsParser {
         kNone,
         kBuild,
         kQuery,
-        kServer,
+        kTrain,
     };
 
     const std::string arg_db_path_ = "path";
@@ -27,15 +27,15 @@ class ArgsParser {
 
    private:
     std::unordered_map<std::string, CommandT> position_ = {
-        {"-h", CommandT::kNone},     {"--help", CommandT::kNone},   {"build", CommandT::kBuild},
-        {"query", CommandT::kQuery}, {"server", CommandT::kServer},
+        {"-h", CommandT::kNone},     {"--help", CommandT::kNone}, {"build", CommandT::kBuild},
+        {"query", CommandT::kQuery}, {"train", CommandT::kTrain},
     };
 
     std::unordered_map<std::string, void (ArgsParser::*)(const std::unordered_map<std::string, std::string>&)>
         selector_ = {
             {"build", &ArgsParser::Build},
             {"query", &ArgsParser::Query},
-            {"server", &ArgsParser::Server},
+            {"train", &ArgsParser::Train},
     };
 
     const std::string help_info_ =
@@ -44,7 +44,7 @@ class ArgsParser {
         "Commands:\n"
         "  build      Build an RDF database.\n"
         "  query      Query an RDF database.\n"
-        "  server     Start an RDF database.\n"
+        "  train      Start an RDF database.\n"
         "\n"
         "Options:\n"
         "  -h, --help  Show this help message and exit.\n"
@@ -67,17 +67,16 @@ class ArgsParser {
         "\n"
         "    Options:\n"
         "      -d, --database <PATH>   Specify the path of the database.\n"
-        "      -f, --file <FILE>       Specify the file containing the query.\n"
+        "      -f, --file <FILE>       Specify the file containing the queries.\n"
         "\n"
-        "  server\n"
-        "    Start an RDF endpoint.\n"
+        "  train\n"
+        "    Train variable order generator.\n"
         "\n"
-        "    Usage: avpjoin server [OPTIONS]\n"
+        "    Usage: avpjoin train [OPTIONS]\n"
         "\n"
         "    Options:\n"
         "      -d, --database <NAME>   Specify the name of the database.\n"
-        "      --ip <IP ADDRESS>       Specify the IP address for the endpoint.\n"
-        "      --port <PORT>           Specify the port for the endpoint.\n";
+        "      -f, --file <FILE>       Specify the file containing the queries to train.\n";
 
     std::unordered_map<std::string, std::string> arguments_;
 
@@ -86,7 +85,7 @@ class ArgsParser {
 
     void Query(const std::unordered_map<std::string, std::string>& args);
 
-    void Server(const std::unordered_map<std::string, std::string>& args);
+    void Train(const std::unordered_map<std::string, std::string>& args);
 
     inline bool IsNumber(const std::string& s) {
         return std::all_of(s.begin(), s.end(), [](char c) { return std::isdigit(c); });

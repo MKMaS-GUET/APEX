@@ -1,30 +1,34 @@
 #ifndef DICTIONARY_HPP
 #define DICTIONARY_HPP
 
-#include "avpjoin/parser/sparql_parser.hpp"
-#include "avpjoin/utils/mmap.hpp"
-#include "avpjoin/utils/vbyte.hpp"
+#include <malloc.h>
+#include <parallel_hashmap/phmap.h>
+
 #include <filesystem>
 #include <fstream>
 #include <future>
 #include <iostream>
-#include <malloc.h>
-#include <parallel_hashmap/phmap.h>
 #include <variant>
 #include <vector>
 
-template <typename Key, typename Value> using hash_map = phmap::flat_hash_map<Key, Value>;
+#include "avpjoin/parser/sparql_parser.hpp"
+#include "avpjoin/utils/mmap.hpp"
+#include "avpjoin/utils/vbyte.hpp"
+
+template <typename Key, typename Value>
+using hash_map = phmap::flat_hash_map<Key, Value>;
 
 enum Order { kSPO, kOPS };
 enum Map { kSubjectMap, kPredicateMap, kObjectMap, kSharedMap };
 
 class Dictionary {
-    template <typename T> class Node {
-        T *offsets_;
+    template <typename T>
+    class Node {
+        T* offsets_;
         ulong size_;
         MMap<char> node_file_;
 
-      public:
+       public:
         Node() : offsets_(0), size_(0) {}
         Node(std::string node_path) : offsets_(0), size_(0) {
             auto [data, size] = LoadAndDecompress(node_path + "/id2offset");
@@ -34,7 +38,7 @@ class Dictionary {
 
             size_ = size;
             if (sizeof(T) == 4) {
-                offsets_ = reinterpret_cast<T *>(data);
+                offsets_ = reinterpret_cast<T*>(data);
             } else if (sizeof(T) == 8) {
                 offsets_ = new T[size_ / 2];
                 uint id = 0;
@@ -52,11 +56,11 @@ class Dictionary {
             node_file_ = MMap<char>(node_path + "/nodes");
         }
 
-        char *operator[](uint id) {
+        char* operator[](uint id) {
             id -= 1;
             ulong start_offset = id ? offsets_[id - 1] : 0;
             ulong end_offset = offsets_[id] - 1;
-            char *node = new char[end_offset - start_offset + 1];
+            char* node = new char[end_offset - start_offset + 1];
             node[end_offset - start_offset] = '\0';
             for (uint i = 0; start_offset < end_offset; i++, start_offset++)
                 node[i] = node_file_[start_offset];
@@ -85,24 +89,24 @@ class Dictionary {
     std::variant<Node<uint>, Node<ulong>> id2object_;
     std::variant<Node<uint>, Node<ulong>> id2shared_;
 
-    bool LoadPredicate(std::vector<std::string> &id2predicate, hash_map<std::string, uint> &predicate2id);
+    bool LoadPredicate(std::vector<std::string>& id2predicate, hash_map<std::string, uint>& predicate2id);
 
     long binarySearch(MMap<std::size_t> arr, long length, std::size_t target);
 
-    uint Find(Map map, const std::string &str);
+    uint Find(Map map, const std::string& str);
 
-    uint FindInMaps(uint cnt, Map map, const std::string &str);
+    uint FindInMaps(uint cnt, Map map, const std::string& str);
 
-  public:
+   public:
     Dictionary();
 
-    Dictionary(std::string &dict_path_);
+    Dictionary(std::string& dict_path_);
 
     void Close();
 
-    const char *ID2String(uint id, SPARQLParser::Term::Position pos);
+    const char* ID2String(uint id, SPARQLParser::Term::Position pos);
 
-    uint String2ID(const std::string &str, SPARQLParser::Term::Position pos);
+    uint String2ID(const std::string& str, SPARQLParser::Term::Position pos);
 
     uint subject_cnt();
 

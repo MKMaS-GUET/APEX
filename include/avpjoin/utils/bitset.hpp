@@ -1,15 +1,16 @@
 #ifndef BIT_SET
 #define BIT_SET
 
-#include "sys/types.h"
 #include <vector>
 
-class Bitset {
-  private:
-    std::vector<unsigned long> bits_;
-    ulong bit_size_; // 总位数
+#include "sys/types.h"
 
-  public:
+class Bitset {
+   private:
+    std::vector<unsigned long> bits_;
+    ulong bit_size_;  // 总位数
+
+   public:
     Bitset();
     Bitset(ulong initial_size);
     ~Bitset();

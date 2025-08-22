@@ -1,4 +1,5 @@
 #include "avpjoin/utils/bit_operations.hpp"
+
 #include <iostream>
 
 namespace bitop {

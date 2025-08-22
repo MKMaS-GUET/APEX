@@ -1,25 +1,35 @@
 #include "avpjoin/parser/sparql_parser.hpp"
+
 #include <codecvt>
 #include <iomanip>
 #include <iostream>
 
 SPARQLParser::ParserException::ParserException(std::string message) : message(std::move(message)) {}
 
-SPARQLParser::ParserException::ParserException(const char *message) : message(message) {}
+SPARQLParser::ParserException::ParserException(const char* message) : message(message) {}
 
-const char *SPARQLParser::ParserException::what() const noexcept { return message.c_str(); }
+const char* SPARQLParser::ParserException::what() const noexcept {
+    return message.c_str();
+}
 
-std::string SPARQLParser::ParserException::to_string() const { return message; }
+std::string SPARQLParser::ParserException::to_string() const {
+    return message;
+}
 
 SPARQLParser::Term::Term() : type(Type::kBlank), literal_type(ValueType::kNone), value() {}
 
 SPARQLParser::Term::Term(Type type, ValueType literal_type, std::string value)
     : type(type), literal_type(literal_type), value(std::move(value)) {}
 
-bool SPARQLParser::Term::IsVariable() const { return type == Type::kVariable; }
+bool SPARQLParser::Term::IsVariable() const {
+    return type == Type::kVariable;
+}
 
 SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj, bool is_option, uint variale_cnt)
-    : subject(std::move(subj)), predicate(std::move(pred)), object(std::move(obj)), is_option(is_option),
+    : subject(std::move(subj)),
+      predicate(std::move(pred)),
+      object(std::move(obj)),
+      is_option(is_option),
       variable_cnt(variale_cnt) {}
 
 SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj)
@@ -29,16 +39,16 @@ SPARQLParser::ProjectModifier::ProjectModifier(Type modifierType) : modifier_typ
 
 std::string SPARQLParser::ProjectModifier::toString() const {
     switch (modifier_type) {
-    case Type::None:
-        return "Modifier::Type::None";
-    case Type::Distinct:
-        return "Modifier::Type::Distinct";
-    case Type::Reduced:
-        return "Modifier::Type::Reduced";
-    case Type::Count:
-        return "Modifier::Type::Count";
-    case Type::Duplicates:
-        return "Modifier::Type::Duplicates";
+        case Type::None:
+            return "Modifier::Type::None";
+        case Type::Distinct:
+            return "Modifier::Type::Distinct";
+        case Type::Reduced:
+            return "Modifier::Type::Reduced";
+        case Type::Count:
+            return "Modifier::Type::Count";
+        case Type::Duplicates:
+            return "Modifier::Type::Duplicates";
     }
     return "Modifier::Type::None";
 }
@@ -54,10 +64,10 @@ void SPARQLParser::parse() {
     if (project_variables_[0] == "*") {
         project_variables_.clear();
         std::set<std::string> variables_set;
-        for (const auto &item : triple_patterns_) {
-            const auto &s = item.subject.value;
-            const auto &p = item.predicate.value;
-            const auto &o = item.object.value;
+        for (const auto& item : triple_patterns_) {
+            const auto& s = item.subject.value;
+            const auto& p = item.predicate.value;
+            const auto& o = item.object.value;
             if (s[0] == '?')
                 variables_set.insert(s);
             if (p[0] == '?')
@@ -151,51 +161,51 @@ void SPARQLParser::ParseFilter() {
     filter.variable_str = variable;
     auto token = sparql_lexer_.GetNextTokenType();
     switch (token) {
-    case SPARQLLexer::TokenT::kEqual:
-        filter.filter_type = Filter::Type::Equal;
-        break;
-    case SPARQLLexer::TokenT::kNotEqual:
-        filter.filter_type = Filter::Type::NotEqual;
-        break;
-    case SPARQLLexer::TokenT::kLess:
-        filter.filter_type = Filter::Type::Less;
-        break;
-    case SPARQLLexer::TokenT::kLessOrEq:
-        filter.filter_type = Filter::Type::LessOrEq;
-        break;
-    case SPARQLLexer::TokenT::kGreater:
-        filter.filter_type = Filter::Type::Greater;
-        break;
-    case SPARQLLexer::TokenT::kGreaterOrEq:
-        filter.filter_type = Filter::Type::GreaterOrEq;
-        break;
-    default:
-        filter.filter_type = Filter::Type::Function;
-        std::string function_name = sparql_lexer_.GetCurrentTokenValue();
-        filter.filter_args.push_back(MakeFunctionLiteral(function_name));
-        break;
+        case SPARQLLexer::TokenT::kEqual:
+            filter.filter_type = Filter::Type::Equal;
+            break;
+        case SPARQLLexer::TokenT::kNotEqual:
+            filter.filter_type = Filter::Type::NotEqual;
+            break;
+        case SPARQLLexer::TokenT::kLess:
+            filter.filter_type = Filter::Type::Less;
+            break;
+        case SPARQLLexer::TokenT::kLessOrEq:
+            filter.filter_type = Filter::Type::LessOrEq;
+            break;
+        case SPARQLLexer::TokenT::kGreater:
+            filter.filter_type = Filter::Type::Greater;
+            break;
+        case SPARQLLexer::TokenT::kGreaterOrEq:
+            filter.filter_type = Filter::Type::GreaterOrEq;
+            break;
+        default:
+            filter.filter_type = Filter::Type::Function;
+            std::string function_name = sparql_lexer_.GetCurrentTokenValue();
+            filter.filter_args.push_back(MakeFunctionLiteral(function_name));
+            break;
     }
     bool is_finish = false;
     while (!is_finish) {
         auto token = sparql_lexer_.GetNextTokenType();
         switch (token) {
-        case SPARQLLexer::TokenT::kRRound:
-            is_finish = true;
-            break;
-        case SPARQLLexer::TokenT::kEof:
-            throw ParserException("Unexpect EOF in parse 'filter(...'");
-        case SPARQLLexer::TokenT::kString: {
-            std::string value = sparql_lexer_.GetCurrentTokenValue();
-            auto string_elem = MakeStringLiteral(value);
-            filter.filter_args.push_back(string_elem);
-        } break;
-        case SPARQLLexer::TokenT::kNumber: {
-            std::string value = sparql_lexer_.GetCurrentTokenValue();
-            auto double_elem = MakeDoubleLiteral(value);
-            filter.filter_args.push_back(double_elem);
-        } break;
-        default:
-            throw ParserException("Parse filter failed when meet :" + sparql_lexer_.GetCurrentTokenValue());
+            case SPARQLLexer::TokenT::kRRound:
+                is_finish = true;
+                break;
+            case SPARQLLexer::TokenT::kEof:
+                throw ParserException("Unexpect EOF in parse 'filter(...'");
+            case SPARQLLexer::TokenT::kString: {
+                std::string value = sparql_lexer_.GetCurrentTokenValue();
+                auto string_elem = MakeStringLiteral(value);
+                filter.filter_args.push_back(string_elem);
+            } break;
+            case SPARQLLexer::TokenT::kNumber: {
+                std::string value = sparql_lexer_.GetCurrentTokenValue();
+                auto double_elem = MakeDoubleLiteral(value);
+                filter.filter_args.push_back(double_elem);
+            } break;
+            default:
+                throw ParserException("Parse filter failed when meet :" + sparql_lexer_.GetCurrentTokenValue());
         }
     }
     filters_[filter.variable_str] = filter;
@@ -255,24 +265,24 @@ void SPARQLParser::ParseBasicGraphPattern(bool is_option) {
 
         Term term;
         switch (token_t) {
-        case SPARQLLexer::TokenT::kVariable:
-            term = MakeVariable(token_value);
-            variable_cnt++;
-            break;
-        case SPARQLLexer::TokenT::kIRI:
-            term = MakeIRI(token_value);
-            break;
-        case SPARQLLexer::TokenT::kString:
-            term = MakeStringLiteral(token_value);
-            break;
-        case SPARQLLexer::TokenT::kNumber:
-            term = MakeDoubleLiteral(token_value);
-            break;
-        case SPARQLLexer::TokenT::kIdentifier:
-            term = MakeNoTypeLiteral(token_value);
-            break;
-        default:
-            throw ParserException("Except variable or IRI or Literal or Blank");
+            case SPARQLLexer::TokenT::kVariable:
+                term = MakeVariable(token_value);
+                variable_cnt++;
+                break;
+            case SPARQLLexer::TokenT::kIRI:
+                term = MakeIRI(token_value);
+                break;
+            case SPARQLLexer::TokenT::kString:
+                term = MakeStringLiteral(token_value);
+                break;
+            case SPARQLLexer::TokenT::kNumber:
+                term = MakeDoubleLiteral(token_value);
+                break;
+            case SPARQLLexer::TokenT::kIdentifier:
+                term = MakeNoTypeLiteral(token_value);
+                break;
+            default:
+                throw ParserException("Except variable or IRI or Literal or Blank");
         }
         term.position = SPARQLParser::Term::Position(i);
         pattern_term[i] = term;
@@ -319,7 +329,7 @@ SPARQLParser::Term SPARQLParser::MakeNoTypeLiteral(std::string literal) {
     return {Term::Type::kLiteral, Term::ValueType::kNone, std::move(literal)};
 }
 
-SPARQLParser::Term SPARQLParser::MakeStringLiteral(const std::string &literal) {
+SPARQLParser::Term SPARQLParser::MakeStringLiteral(const std::string& literal) {
     // size_t literal_len = literal.size();
     // std::string cleaned_literal;
     // if (literal_len > 2) {
@@ -333,33 +343,46 @@ SPARQLParser::Term SPARQLParser::MakeFunctionLiteral(std::string literal) {
     return {Term::Type::kLiteral, Term::ValueType::kFunction, std::move(literal)};
 }
 
-SPARQLParser::SPARQLParser(const SPARQLLexer &sparql_lexer)
+SPARQLParser::SPARQLParser(const SPARQLLexer& sparql_lexer)
     : limit_(UINTMAX_MAX), sparql_lexer_(sparql_lexer), project_modifier_(ProjectModifier::Type::None) {
     parse();
 }
 
 SPARQLParser::SPARQLParser(std::string input_string)
-    : limit_(UINTMAX_MAX), sparql_lexer_(SPARQLLexer(std::move(input_string))),
+    : limit_(UINTMAX_MAX),
+      sparql_lexer_(SPARQLLexer(std::move(input_string))),
       project_modifier_(ProjectModifier::Type::None) {
     parse();
 }
 
-SPARQLParser::ProjectModifier SPARQLParser::project_modifier() const { return project_modifier_; }
+SPARQLParser::ProjectModifier SPARQLParser::project_modifier() const {
+    return project_modifier_;
+}
 
-const std::vector<std::string> &SPARQLParser::ProjectVariables() const { return project_variables_; }
+const std::vector<std::string>& SPARQLParser::ProjectVariables() const {
+    return project_variables_;
+}
 
-const std::vector<SPARQLParser::TriplePattern> &SPARQLParser::TriplePatterns() const { return triple_patterns_; }
+const std::vector<SPARQLParser::TriplePattern>& SPARQLParser::TriplePatterns() const {
+    return triple_patterns_;
+}
 
 std::vector<std::vector<std::string>> SPARQLParser::TripleList() const {
     std::vector<std::vector<std::string>> list;
-    for (const auto &item : triple_patterns_) {
+    for (const auto& item : triple_patterns_) {
         list.push_back({item.subject.value, item.predicate.value, item.object.value});
     }
     return list;
 }
 
-const std::unordered_map<std::string, SPARQLParser::Filter> &SPARQLParser::Filters() const { return filters_; }
+const std::unordered_map<std::string, SPARQLParser::Filter>& SPARQLParser::Filters() const {
+    return filters_;
+}
 
-const std::unordered_map<std::string, std::string> &SPARQLParser::Prefixes() const { return prefixes_; }
+const std::unordered_map<std::string, std::string>& SPARQLParser::Prefixes() const {
+    return prefixes_;
+}
 
-size_t SPARQLParser::Limit() const { return limit_; }
+size_t SPARQLParser::Limit() const {
+    return limit_;
+}
