@@ -8,96 +8,18 @@ import json
 import logging
 
 from torch.distributions import Categorical
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import add_self_loops, degree
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import add_self_loops, degree
-
-
-class EdgeAwareGCNConv(MessagePassing):
-    def __init__(self, in_channels, out_channels, edge_dim):
-        super(EdgeAwareGCNConv, self).__init__(aggr="add")  # "Add" aggregation
-        self.lin = nn.Linear(in_channels, out_channels)
-        self.edge_encoder = nn.Linear(edge_dim, in_channels)
-
-        # 初始化权重
-        nn.init.xavier_uniform_(self.lin.weight)
-        nn.init.xavier_uniform_(self.edge_encoder.weight)
-        nn.init.zeros_(self.lin.bias)
-        nn.init.zeros_(self.edge_encoder.bias)
-
-    def forward(self, x, edge_index, edge_attr):
-        # 添加自环
-        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
-
-        # 为自环边创建特征 (全零)
-        if edge_attr is not None and edge_attr.size(0) > 0:
-            self_loop_attr = torch.zeros(
-                x.size(0),
-                edge_attr.size(1),
-                dtype=edge_attr.dtype,
-                device=edge_attr.device,
-            )
-            edge_attr = torch.cat([edge_attr, self_loop_attr], dim=0)
-        else:
-            # 如果没有边特征，创建全零边特征
-            edge_attr = torch.zeros(
-                edge_index.size(1), 1, dtype=x.dtype, device=x.device
-            )
-
-        # 对边特征进行编码
-        edge_embedding = self.edge_encoder(edge_attr)
-
-        # 计算归一化系数
-        row, col = edge_index
-        deg = degree(row, x.size(0), dtype=x.dtype)
-        deg_inv_sqrt = deg.pow(-0.5)
-        deg_inv_sqrt[deg_inv_sqrt == float("inf")] = 0
-        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
-
-        # 线性变换节点特征
-        x = self.lin(x)
-
-        # 开始传播
-        return self.propagate(edge_index, x=x, norm=norm, edge_embedding=edge_embedding)
-
-    def message(self, x_j, norm, edge_embedding):
-        # 消息传递：结合节点特征和边特征
-        # 确保维度匹配
-        if x_j.size(1) != edge_embedding.size(1):
-            # 如果维度不匹配，调整边嵌入维度
-            edge_embedding = F.linear(
-                edge_embedding,
-                torch.eye(
-                    x_j.size(1), edge_embedding.size(1), device=edge_embedding.device
-                ),
-            )
-
-        # 结合节点特征和边特征
-        combined = x_j + edge_embedding
-
-        # 应用归一化
-        return norm.view(-1, 1) * combined
+from torch_geometric.nn import GCNConv
+from torch_geometric.data import Data
 
 
 class GraphActorCritic(nn.Module):
-    def __init__(self, node_feature_dim, edge_feature_dim, hidden_dim=128):
+    def __init__(self, node_feature_dim, hidden_dim=128):
         super().__init__()
         self.hidden_dim = hidden_dim
 
-        # 使用支持边特征的图卷积层
-        self.conv1 = EdgeAwareGCNConv(node_feature_dim, hidden_dim, edge_feature_dim)
-        self.conv2 = EdgeAwareGCNConv(hidden_dim, hidden_dim, edge_feature_dim)
-
-        # 或者使用PyG的NNConv（也需要边特征）
-        # nn1 = nn.Sequential(nn.Linear(edge_feature_dim, hidden_dim), nn.ReLU())
-        # self.conv1 = NNConv(node_feature_dim, hidden_dim, nn1)
-        # nn2 = nn.Sequential(nn.Linear(edge_feature_dim, hidden_dim), nn.ReLU())
-        # self.conv2 = NNConv(hidden_dim, hidden_dim, nn2)
+        # 使用标准的GCN卷积层
+        self.conv1 = GCNConv(node_feature_dim, hidden_dim)
+        self.conv2 = GCNConv(hidden_dim, hidden_dim)
 
         # Actor和Critic头
         self.actor = nn.Sequential(
@@ -108,13 +30,6 @@ class GraphActorCritic(nn.Module):
 
         self.critic = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, 1)
-        )
-
-        # 边特征编码器
-        self.edge_encoder = nn.Sequential(
-            nn.Linear(edge_feature_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
         )
 
     def build_node_features(self, query_graph):
@@ -136,8 +51,12 @@ class GraphActorCritic(nn.Module):
         for edge in edges:
             out_degree[edge[0]] += 1
             in_degree[edge[1]] += 1
+
+        # 计算总度数
+        total_degree = in_degree + out_degree
+
         # 计算每个节点的邻居状态统计
-        neighbor_stats = torch.zeros(num_nodes, 6, device=device)  # 6个特征
+        neighbor_stats = torch.zeros(num_nodes, 6, device=device)
         status_int = status.int()
         for i in range(num_nodes):
             # 入邻居
@@ -167,6 +86,7 @@ class GraphActorCritic(nn.Module):
                 est_size,
                 in_degree,
                 out_degree,
+                total_degree,  # 添加总度数特征
                 neighbor_stats[:, 0],
                 neighbor_stats[:, 1],
                 neighbor_stats[:, 2],
@@ -175,7 +95,7 @@ class GraphActorCritic(nn.Module):
                 neighbor_stats[:, 5],
             ],
             dim=1,
-        )  # [num_nodes, 10]
+        )  # [num_nodes, 11]
         return node_features
 
     def build_edge_index(self, edges):
@@ -187,36 +107,17 @@ class GraphActorCritic(nn.Module):
         )
         return edge_index
 
-    def build_edge_features(self, edge_features):
-        """构建边特征张量，并移动到设备"""
-        if not edge_features:
-            return torch.empty((0, 5), dtype=torch.float32, device=device)  # 修改输出维度
-
-        edge_attr = torch.tensor(edge_features, dtype=torch.float32, device=device)
-
-        # 对边特征进行处理
-        if edge_attr.size(0) > 0:
-            # 第一列：对数缩放处理
-            edge_attr[:, 0] = torch.log1p(edge_attr[:, 0])
-
-            # 第二列：one-hot 编码
-            one_hot = F.one_hot(edge_attr[:, 1].long(), num_classes=3).float()
-            edge_attr = torch.cat([edge_attr[:, :1], one_hot], dim=1)  # 拼接处理后的特征
-
-        return edge_attr
-
     def forward(self, query_graph):
         # 构建节点特征
         node_features = self.build_node_features(query_graph)
         num_nodes = node_features.shape[0]
 
-        # 构建边索引和边特征
+        # 构建边索引
         edge_index = self.build_edge_index(query_graph["edges"])
-        edge_attr = self.build_edge_features(query_graph.get("edge_features", []))
 
-        # 图卷积 - 使用支持边特征的卷积层
-        x = F.relu(self.conv1(node_features, edge_index, edge_attr))
-        x = F.relu(self.conv2(x, edge_index, edge_attr))  # [num_nodes, hidden_dim]
+        # 图卷积 - 使用标准的GCN卷积层
+        x = F.relu(self.conv1(node_features, edge_index))
+        x = F.relu(self.conv2(x, edge_index))  # [num_nodes, hidden_dim]
 
         # 全局图表示
         graph_representation = torch.mean(x, dim=0)  # [hidden_dim]
@@ -242,10 +143,9 @@ class GraphActorCritic(nn.Module):
 
 
 def train_episode(service: udp_service.UDPService, model, optimizer):
-
     print("--------------------------------------------------")
     """使用UDP服务和图神经网络的训练函数"""
-    states, actions, rewards = [], [], []
+    states, actions, rewards, log_probs, values = [], [], [], [], []
 
     # 等待开始信号
     msg = service.receive_message()
@@ -256,9 +156,12 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
 
     step_count = 0
     while True:
-
         # 解析查询图状态
-        query_graph = json.loads(service.receive_message())
+        msg = service.receive_message()
+        if msg == "end":
+            break
+
+        query_graph = json.loads(msg)
 
         # 检查是否有可选择的节点
         vertex_status = query_graph["status"]
@@ -295,11 +198,16 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         # 发送选择的动作
         service.send_message(selected_vertex)
 
+        # 接收奖励
         msg = service.receive_message()
         if msg == "end":
             break
 
-        reward = eval(msg)
+        try:
+            reward = float(msg)
+        except ValueError:
+            logger.error(f"Invalid reward value: {msg}")
+            reward = 0
 
         logger.info(
             f"Step {step_count}: Selected vertex {selected_vertex}, Reward: {reward}"
@@ -307,8 +215,10 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
 
         # 存储数据
         states.append(query_graph.copy())
-        actions.append(action.item())  # Store action index
+        actions.append(action)
         rewards.append(reward)
+        log_probs.append(dist.log_prob(action))
+        values.append(value)
 
         step_count += 1
 
@@ -324,38 +234,53 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         returns.insert(0, R)
 
     returns = torch.tensor(returns, device=device, dtype=torch.float32)
-    actions = torch.tensor(actions, device=device, dtype=torch.long)
+    values = torch.stack(values)
+    log_probs = torch.stack(log_probs)
+    actions = torch.stack(actions)
+
+    # 计算优势
+    advantages = returns - values.detach()
+    if advantages.std() > 1e-8:  # 避免除零
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    else:
+        advantages = advantages - advantages.mean()
 
     # PPO更新
+    policy_losses = []
+    value_losses = []
+
     for _ in range(5):  # PPO更新迭代次数
-        all_log_probs = []
+        all_action_logits = []
         all_values = []
 
         # 重新计算所有状态的动作logits和值
         for state_data in states:
+            # 注意：这里不要使用 torch.no_grad()，因为我们需要计算梯度
             action_logits, value = model(state_data)
-            dist = Categorical(logits=action_logits)
-            all_log_probs.append(dist.log_prob(actions[len(all_log_probs)]))
+            all_action_logits.append(action_logits)
             all_values.append(value)
 
-        log_probs = torch.stack(all_log_probs)
-        values = torch.stack(all_values)
+        # 计算新的对数概率
+        new_log_probs = []
+        for i, (action_logits, action) in enumerate(zip(all_action_logits, actions)):
+            dist = Categorical(logits=action_logits)
+            new_log_probs.append(dist.log_prob(action))
 
-        # 计算优势
-        advantages = returns - values
-        if advantages.std() > 1e-8:  # 避免除零
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        else:
-            advantages = advantages - advantages.mean()
+        new_log_probs = torch.stack(new_log_probs)
+        new_values = torch.stack(all_values)
 
         # PPO损失
-        ratio = torch.exp(log_probs - log_probs.detach())
+        ratio = torch.exp(new_log_probs - log_probs.detach())
         clipped_ratio = torch.clamp(ratio, 0.8, 1.2)
         policy_loss = -torch.min(ratio * advantages, clipped_ratio * advantages).mean()
-        value_loss = F.mse_loss(values, returns)
+        value_loss = F.mse_loss(new_values, returns)
 
         # 总损失
         loss = policy_loss + 0.5 * value_loss
+
+        # 记录损失
+        policy_losses.append(policy_loss.item())
+        value_losses.append(value_loss.item())
 
         # 反向传播和优化
         optimizer.zero_grad()
@@ -365,8 +290,13 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
 
     # 计算总奖励
     total_reward = sum(rewards)
+    avg_policy_loss = np.mean(policy_losses)
+    avg_value_loss = np.mean(value_losses)
 
-    logger.info(f"Episode finished: Steps={step_count}, Total Reward={total_reward}")
+    logger.info(
+        f"Episode finished: Steps={step_count}, Total Reward={total_reward}, "
+        f"Avg Policy Loss={avg_policy_loss:.4f}, Avg Value Loss={avg_value_loss:.4f}"
+    )
 
     return 0
 
@@ -417,12 +347,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
 # 初始化模型和优化器
-node_feature_dim = 10  # 根据build_node_features输出的特征维度
-edge_feature_dim = 4  # 边特征维度
-model = GraphActorCritic(node_feature_dim, edge_feature_dim).to(device)
+node_feature_dim = 11  # 根据build_node_features输出的特征维度
+model = GraphActorCritic(node_feature_dim).to(device)
 optimizer = adam.Adam(model.parameters(), lr=1e-3)
 
-# # UDP服务
+# UDP服务
 service = udp_service.UDPService(2078, 2077)
 
 while not train_episode(service, model, optimizer):
@@ -496,19 +425,3 @@ while True:
 
 #     # 返回优先级最高的vertex
 #     return candidates_info[0]["vertex"]
-
-
-# service = udp_service.UDPService(2078, 2077)
-
-# while True:
-#     msg = service.receive_message()
-#     if msg == "start":
-#         while True:
-#             msg = service.receive_message()
-#             if msg != "end":
-#                 query_graph = json.loads(msg)
-#                 print(query_graph)
-#                 next_veaiable = select_vertex(query_graph)
-#                 service.send_message(next_veaiable)
-#             else:
-#                 break
