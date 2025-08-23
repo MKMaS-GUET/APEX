@@ -6,20 +6,45 @@
 #include "avpjoin/query/result_generator.hpp"
 
 QueryExecutor::Variable::Variable()
-    : position(SPARQLParser::Term::kShared), triple_constant_id(0), triple_constant_pos(SPARQLParser::Term::kShared),
-      pre_retrieve(), total_set_size(-1), connection(nullptr), is_none(false), is_single(false), var_id(-1) {}
+    : position(SPARQLParser::Term::kShared),
+      triple_constant_id(0),
+      triple_constant_pos(SPARQLParser::Term::kShared),
+      pre_retrieve(),
+      total_set_size(-1),
+      connection(nullptr),
+      is_none(false),
+      is_single(false),
+      var_id(-1) {}
 
 QueryExecutor::Variable::Variable(std::string variable, Position position, std::span<uint> pre_retrieve)
-    : variable(variable), position(position), triple_constant_id(0), triple_constant_pos(SPARQLParser::Term::kShared),
-      total_set_size(-1), connection(nullptr), is_none(false), is_single(true), var_id(-1) {
+    : variable(variable),
+      position(position),
+      triple_constant_id(0),
+      triple_constant_pos(SPARQLParser::Term::kShared),
+      total_set_size(-1),
+      connection(nullptr),
+      is_none(false),
+      is_single(true),
+      var_id(-1) {
     this->pre_retrieve = pre_retrieve;
 }
 
-QueryExecutor::Variable::Variable(std::string variable, Position position, uint triple_constant_id,
-                                  Position triple_constant_pos, std::shared_ptr<IndexRetriever> index)
-    : variable(variable), position(position), triple_constant_id(triple_constant_id),
-      triple_constant_pos(triple_constant_pos), pre_retrieve(), total_set_size(-1), connection(nullptr), is_none(false),
-      is_single(false), var_id(-1), index_(index) {}
+QueryExecutor::Variable::Variable(std::string variable,
+                                  Position position,
+                                  uint triple_constant_id,
+                                  Position triple_constant_pos,
+                                  std::shared_ptr<IndexRetriever> index)
+    : variable(variable),
+      position(position),
+      triple_constant_id(triple_constant_id),
+      triple_constant_pos(triple_constant_pos),
+      pre_retrieve(),
+      total_set_size(-1),
+      connection(nullptr),
+      is_none(false),
+      is_single(false),
+      var_id(-1),
+      index_(index) {}
 
 QueryExecutor::Edge::Edge(uint id, Position pos, uint dst) : id(id), pos(pos), dst(dst) {}
 
@@ -27,11 +52,14 @@ void QueryExecutor::QueryGraph::AddVertex(std::pair<std::string, uint> vertex) {
     vertexes.try_emplace(vertex.first, vertexes.size());
     uint vartex_id = vertexes[vertex.first];
     vertex_status.try_emplace(vartex_id, 1);
+    if (vertex.second < pre_est_size)
+        pre_est_size = vertex.second;
     if (est_size[vartex_id] == 0 || vertex.second < est_size[vartex_id])
         est_size[vartex_id] = vertex.second;
 }
 
-void QueryExecutor::QueryGraph::AddEdge(std::pair<std::string, uint> src, std::pair<std::string, uint> dst,
+void QueryExecutor::QueryGraph::AddEdge(std::pair<std::string, uint> src,
+                                        std::pair<std::string, uint> dst,
                                         std::pair<uint, Position> edge) {
     AddVertex(src);
     AddVertex(dst);
@@ -43,10 +71,13 @@ void QueryExecutor::QueryGraph::AddEdge(std::pair<std::string, uint> src, std::p
 void QueryExecutor::QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
     uint vertex_id = vertexes[variable];
 
-    for (const auto &[v_id, nbrs] : adjacency_list) {
+    vertex_reward = pre_est_size - cur_est_size;
+    pre_est_size = cur_est_size;
+
+    for (const auto& [v_id, nbrs] : adjacency_list) {
         if (v_id == vertex_id) {
             // 更新当前顶点的邻居
-            for (const auto &nbr : nbrs) {
+            for (const auto& nbr : nbrs) {
                 if (est_size_updated[nbr.dst] == 0 || cur_est_size < est_size[nbr.dst]) {
                     est_size[nbr.dst] = cur_est_size;
                     est_size_updated[nbr.dst] = 1;
@@ -54,7 +85,7 @@ void QueryExecutor::QueryGraph::UpdateQueryGraph(std::string variable, uint cur_
             }
         } else {
             // 检查其他顶点是否指向当前顶点
-            for (const auto &edge : nbrs) {
+            for (const auto& edge : nbrs) {
                 if (est_size_updated[v_id] == 0 || (edge.dst == vertex_id && cur_est_size < est_size[v_id])) {
                     est_size[v_id] = cur_est_size;
                     est_size_updated[v_id] = 1;
@@ -71,14 +102,14 @@ void QueryExecutor::QueryGraph::UpdateQueryGraph(std::string variable, uint cur_
             vertex_status[i] = 0;
     }
 
-    for (auto &[vertex, v_id] : vertexes) {
+    for (auto& [vertex, v_id] : vertexes) {
         if (vertex_status[v_id] == -1) {
-            for (auto &nbr : adjacency_list[v_id]) {
+            for (auto& nbr : adjacency_list[v_id]) {
                 if (vertex_status[nbr.dst] != -1)
                     vertex_status[nbr.dst] = 1;
             }
-            for (auto &[id, nbrs] : adjacency_list) {
-                for (auto &edge : nbrs) {
+            for (auto& [id, nbrs] : adjacency_list) {
+                for (auto& edge : nbrs) {
                     if (edge.dst == v_id && vertex_status[id] != -1)
                         vertex_status[id] = 1;
                 }
@@ -94,7 +125,7 @@ std::string QueryExecutor::QueryGraph::ToString() {
     // 第一部分：vertex 按照 map 中的 value 排序输出
     json << "  \"vertices\": [\n";
     std::vector<std::pair<uint, std::string>> sorted_vertices;
-    for (const auto &[var_name, vertex_id] : vertexes)
+    for (const auto& [var_name, vertex_id] : vertexes)
         sorted_vertices.emplace_back(vertex_id, var_name);
     std::sort(sorted_vertices.begin(), sorted_vertices.end());
 
@@ -109,12 +140,24 @@ std::string QueryExecutor::QueryGraph::ToString() {
     // 第二部分：边信息列表 (src, dst)
     json << "  \"edges\": [\n";
     bool first_edge = true;
-    for (const auto &[src_id, edges] : adjacency_list) {
-        for (const auto &edge : edges) {
+    for (const auto& [src_id, edges] : adjacency_list) {
+        for (const auto& edge : edges) {
             if (!first_edge)
                 json << ",\n";
             json << "    [" << src_id << ", " << edge.dst << "]";
             first_edge = false;
+        }
+    }
+    json << "\n  ],\n";
+
+    json << "  \"edge_features\": [\n";
+    bool first_feature = true;
+    for (const auto& [src_id, edges] : adjacency_list) {
+        for (const auto& edge : edges) {
+            if (!first_feature)
+                json << ",\n";
+            json << "    [" << edge.id << ", " << static_cast<uint>(edge.pos) << "]";
+            first_feature = false;
         }
     }
     json << "\n  ],\n";
@@ -147,6 +190,10 @@ std::string QueryExecutor::QueryGraph::ToString() {
 
     json << "}";
     return json.str();
+}
+
+int QueryExecutor::QueryGraph::reward() {
+    return this->vertex_reward;
 }
 
 std::span<uint> QueryExecutor::Variable::Retrieve(uint key) {
@@ -193,7 +240,9 @@ std::span<uint> QueryExecutor::Variable::Retrieve(uint key) {
 }
 
 QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
-                             const std::vector<SPARQLParser::TriplePattern> &triple_partterns, uint limit, bool train)
+                             const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
+                             uint limit,
+                             bool train)
     : index_(index) {
     zero_result_ = false;
     train_ = train;
@@ -204,10 +253,10 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
     TripplePattern two_variable_tp;
     TripplePattern three_variable_tp;
 
-    for (const auto &triple_parttern : triple_partterns) {
-        auto &s = triple_parttern.subject;
-        auto &p = triple_parttern.predicate;
-        auto &o = triple_parttern.object;
+    for (const auto& triple_parttern : triple_partterns) {
+        auto& s = triple_parttern.subject;
+        auto& p = triple_parttern.predicate;
+        auto& o = triple_parttern.object;
 
         if (!p.IsVariable() && index_->Term2ID(p) == 0) {
             zero_result_ = true;
@@ -224,8 +273,8 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
 
     phmap::flat_hash_set<std::string> remaining_variables;
 
-    for (const auto &tp : one_variable_tp) {
-        auto &[s, p, o] = tp;
+    for (const auto& tp : one_variable_tp) {
+        auto& [s, p, o] = tp;
 
         std::span<uint> set;
         if (s.IsVariable()) {
@@ -267,8 +316,8 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
         }
     }
 
-    for (const auto &tp : two_variable_tp) {
-        auto &[s, p, o] = tp;
+    for (const auto& tp : two_variable_tp) {
+        auto& [s, p, o] = tp;
 
         if (s.IsVariable() && p.IsVariable()) {
             uint oid = index_->Term2ID(o);
@@ -279,8 +328,8 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
 
             remaining_variables.insert(s.value);
             remaining_variables.insert(p.value);
-            Variable &s_var = str2var_[s.value].emplace_back(s.value, s.position, oid, o.position, index_);
-            Variable &p_var = str2var_[p.value].emplace_back(p.value, p.position, oid, o.position, index_);
+            Variable& s_var = str2var_[s.value].emplace_back(s.value, s.position, oid, o.position, index_);
+            Variable& p_var = str2var_[p.value].emplace_back(p.value, p.position, oid, o.position, index_);
             s_var.connection = &p_var;
             p_var.connection = &s_var;
         }
@@ -293,8 +342,8 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
 
             remaining_variables.insert(s.value);
             remaining_variables.insert(o.value);
-            Variable &s_var = str2var_[s.value].emplace_back(s.value, s.position, pid, p.position, index_);
-            Variable &o_var = str2var_[o.value].emplace_back(o.value, o.position, pid, p.position, index_);
+            Variable& s_var = str2var_[s.value].emplace_back(s.value, s.position, pid, p.position, index_);
+            Variable& o_var = str2var_[o.value].emplace_back(o.value, o.position, pid, p.position, index_);
             s_var.connection = &o_var;
             o_var.connection = &s_var;
         }
@@ -307,8 +356,8 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
 
             remaining_variables.insert(p.value);
             remaining_variables.insert(o.value);
-            Variable &p_var = str2var_[p.value].emplace_back(p.value, p.position, sid, s.position, index_);
-            Variable &o_var = str2var_[o.value].emplace_back(o.value, o.position, sid, s.position, index_);
+            Variable& p_var = str2var_[p.value].emplace_back(p.value, p.position, sid, s.position, index_);
+            Variable& o_var = str2var_[o.value].emplace_back(o.value, o.position, sid, s.position, index_);
             p_var.connection = &o_var;
             o_var.connection = &p_var;
         }
@@ -319,7 +368,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
         result_relation_.push_back(std::vector<std::pair<uint, uint>>());
     // remaining_variables to remaining_variables_
     remaining_variables_.reserve(remaining_variables.size());
-    for (const auto &variable : remaining_variables)
+    for (const auto& variable : remaining_variables)
         remaining_variables_.push_back(variable);
 }
 
@@ -333,11 +382,11 @@ std::string QueryExecutor::NextVarieble() {
     std::vector<uint> remaining_variable_idx;
 
     for (uint i = 0; i < remaining_variables_.size(); i++) {
-        auto &vars = str2var_[remaining_variables_[i]];
+        auto& vars = str2var_[remaining_variables_[i]];
 
         uint link = 0;
         uint var_min_size = __UINT32_MAX__;
-        for (auto &var : vars) {
+        for (auto& var : vars) {
             if (var.is_none)
                 link++;
             uint size = __UINT32_MAX__;
@@ -373,9 +422,9 @@ std::string QueryExecutor::NextVarieble() {
 
     std::sort(remaining_variable_idx.begin(), remaining_variable_idx.end(), [&](uint a, uint b) {
         if (link_cnt[a] != link_cnt[b])
-            return link_cnt[a] < link_cnt[b]; // link_cnt 越小越前
+            return link_cnt[a] < link_cnt[b];  // link_cnt 越小越前
         if (var_cnt[a] != var_cnt[b])
-            return var_cnt[a] > var_cnt[b]; // var_cnt 越大越前
+            return var_cnt[a] > var_cnt[b];  // var_cnt 越大越前
         return min_size[a] < min_size[b];
     });
 
@@ -392,8 +441,8 @@ std::string QueryExecutor::NextVarieble() {
     return next_variable;
 }
 
-std::span<uint> QueryExecutor::LeapfrogJoin(JoinList &lists) {
-    std::vector<uint> *result_set = new std::vector<uint>();
+std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
+    std::vector<uint>* result_set = new std::vector<uint>();
 
     if (lists.Size() == 1) {
         for (uint i = 0; i < lists.GetListByIndex(0).size(); i++)
@@ -440,13 +489,14 @@ std::span<uint> QueryExecutor::LeapfrogJoin(JoinList &lists) {
     return std::span<uint>(result_set->begin(), result_set->size());
 }
 
-uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable *> vars,
-                                 std::vector<VariableGroup *> variable_groups, ResultMap &result) {
+uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
+                                 std::vector<VariableGroup*> variable_groups,
+                                 ResultMap& result) {
     uint group_cnt = variable_groups.size();
     std::atomic<uint> result_len = 0;
 
     uint var_cnt = 0;
-    for (auto &group : variable_groups) {
+    for (auto& group : variable_groups) {
         for (uint offset : group->key_offsets) {
             if (offset > 0)
                 var_cnt++;
@@ -468,7 +518,7 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable *> vars,
 
     uint last_var_result_len = 0;
 
-    auto joinWorker = [&](auto begin_it, auto end_it, uint target_group_idx, ResultMap &local_result) -> uint {
+    auto joinWorker = [&](auto begin_it, auto end_it, uint target_group_idx, ResultMap& local_result) -> uint {
         uint local_result_len = 0;
         std::vector<VariableGroup::iterator> iterators(group_cnt);
         std::vector<VariableGroup::iterator> ends(group_cnt);
@@ -497,10 +547,10 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable *> vars,
                     break;
                 }
 
-                const auto &candidate_keys = *iterators[i];
-                const auto &var_offsets = variable_groups[i]->var_offsets;
-                const auto &key_offsets = variable_groups[i]->key_offsets;
-                const auto &var_result_offset = variable_groups[i]->var_result_offset;
+                const auto& candidate_keys = *iterators[i];
+                const auto& var_offsets = variable_groups[i]->var_offsets;
+                const auto& key_offsets = variable_groups[i]->key_offsets;
+                const auto& var_result_offset = variable_groups[i]->var_result_offset;
                 const uint key_offsets_size = key_offsets.size();
 
                 for (uint v = 0; v < key_offsets_size; v++) {
@@ -566,20 +616,20 @@ uint QueryExecutor::ParallelJoin(std::vector<QueryExecutor::Variable *> vars,
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
 
-    for (const auto &range : ranges) {
+    for (const auto& range : ranges) {
         threads.emplace_back([&, range]() {
             ResultMap thread_result;
             uint thread_result_len = joinWorker(range.first, range.second, max_group_idx, thread_result);
             {
                 std::lock_guard<std::mutex> lock(result_mutex);
-                for (auto &[key_val, val] : thread_result)
+                for (auto& [key_val, val] : thread_result)
                     result[key_val] = std::move(val);
                 result_len += thread_result_len;
             }
         });
     }
 
-    for (auto &thread : threads) {
+    for (auto& thread : threads) {
         if (thread.joinable())
             thread.join();
     }
@@ -597,7 +647,7 @@ std::vector<VariableGroup::Group> QueryExecutor::GetVariableGroup() {
 
     var_ancestors.reserve(last_vars.size());
 
-    for (const auto &var : last_vars) {
+    for (const auto& var : last_vars) {
         std::vector<uint> ancestors;
         std::vector<char> visited(plan_.size(), 0);
 
@@ -607,7 +657,7 @@ std::vector<VariableGroup::Group> QueryExecutor::GetVariableGroup() {
             visited[layer_id] = 1;
             ancestors.push_back(layer_id);
 
-            for (const auto &upper_var : plan_[layer_id].second) {
+            for (const auto& upper_var : plan_[layer_id].second) {
                 if (upper_var->connection) {
                     int next = upper_var->connection->var_id;
                     if (next != -1) {
@@ -671,7 +721,7 @@ std::vector<VariableGroup::Group> QueryExecutor::GetVariableGroup() {
     std::vector<VariableGroup::Group> result;
     result.reserve(comp.size());
 
-    for (auto &[_, var_offsets] : comp) {
+    for (auto& [_, var_offsets] : comp) {
         VariableGroup::Group group;
         std::sort(var_offsets.begin(), var_offsets.end());
         group.var_offsets = var_offsets;
@@ -699,8 +749,8 @@ std::vector<VariableGroup::Group> QueryExecutor::GetVariableGroup() {
     return result;
 }
 
-std::vector<VariableGroup *>
-QueryExecutor::GetResultRelationAndVariableGroup(std::vector<QueryExecutor::Variable *> &vars) {
+std::vector<VariableGroup*> QueryExecutor::GetResultRelationAndVariableGroup(
+    std::vector<QueryExecutor::Variable*>& vars) {
     std::vector<VariableGroup::Group> var_idx_group = GetVariableGroup();
 
     uint none_cnt = 0;
@@ -712,15 +762,15 @@ QueryExecutor::GetResultRelationAndVariableGroup(std::vector<QueryExecutor::Vari
         }
         key_offsets_map.push_back(none_cnt);
     }
-    for (auto &group : var_idx_group) {
+    for (auto& group : var_idx_group) {
         std::vector<uint> key_offsets;
         for (uint v : group.var_offsets)
             key_offsets.push_back(key_offsets_map[v]);
         group.key_offsets = key_offsets;
     }
 
-    std::vector<VariableGroup *> variable_groups;
-    for (auto &group : var_idx_group) {
+    std::vector<VariableGroup*> variable_groups;
+    for (auto& group : var_idx_group) {
         if (group.var_offsets.size() > 1) {
             variable_groups.push_back(new VariableGroup(result_map_, result_relation_, group));
         } else {
@@ -738,18 +788,18 @@ void QueryExecutor::ProcessNextVariable(std::string variable) {
     if (plan_.size() == str2var_.size())
         return;
 
-    std::vector<QueryExecutor::Variable *> next_vars;
-    for (auto &var : str2var_[variable])
+    std::vector<QueryExecutor::Variable*> next_vars;
+    for (auto& var : str2var_[variable])
         next_vars.push_back(&var);
     plan_.push_back({variable, next_vars});
 
-    for (auto &var : plan_.back().second) {
+    for (auto& var : plan_.back().second) {
         var->var_id = plan_.size() - 1;
         if (var->connection && var->connection->var_id == -1)
             var->connection->is_none = true;
     }
 
-    std::vector<VariableGroup *> variable_groups = GetResultRelationAndVariableGroup(next_vars);
+    std::vector<VariableGroup*> variable_groups = GetResultRelationAndVariableGroup(next_vars);
 
     result_map_.push_back(ResultMap());
     uint result_len = ParallelJoin(next_vars, variable_groups, result_map_.back());
@@ -758,7 +808,7 @@ void QueryExecutor::ProcessNextVariable(std::string variable) {
         zero_result_ = true;
         return;
     }
-    for (auto &group : variable_groups)
+    for (auto& group : variable_groups)
         group->~VariableGroup();
 
     if (train_)
@@ -801,17 +851,17 @@ void QueryExecutor::Query() {
 }
 
 QueryExecutor::~QueryExecutor() {
-    for (auto &map : result_map_)
+    for (auto& map : result_map_)
         map.clear();
     result_relation_.clear();
 }
 
-std::vector<std::pair<uint, Position>> QueryExecutor::MappingVariable(const std::vector<std::string> &variables) {
+std::vector<std::pair<uint, Position>> QueryExecutor::MappingVariable(const std::vector<std::string>& variables) {
     std::vector<std::pair<uint, Position>> ret;
     ret.reserve(variables.size());
 
-    for (const auto &var : variables) {
-        const auto &vars = str2var_[var];
+    for (const auto& var : variables) {
+        const auto& vars = str2var_[var];
         if (vars.empty())
             continue;
         uint var_id = vars.front().var_id;
@@ -822,20 +872,20 @@ std::vector<std::pair<uint, Position>> QueryExecutor::MappingVariable(const std:
         }
 
         // Count positions
-        int pos_count[3] = {0, 0, 0}; // subject, predicate, object
-        for (const auto &var : vars) {
+        int pos_count[3] = {0, 0, 0};  // subject, predicate, object
+        for (const auto& var : vars) {
             switch (var.position) {
-            case Position::kSubject:
-                pos_count[0]++;
-                break;
-            case Position::kPredicate:
-                pos_count[1]++;
-                break;
-            case Position::kObject:
-                pos_count[2]++;
-                break;
-            default:
-                break;
+                case Position::kSubject:
+                    pos_count[0]++;
+                    break;
+                case Position::kPredicate:
+                    pos_count[1]++;
+                    break;
+                case Position::kObject:
+                    pos_count[2]++;
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -850,15 +900,25 @@ std::vector<std::pair<uint, Position>> QueryExecutor::MappingVariable(const std:
     return ret;
 }
 
-bool QueryExecutor::zero_result() { return zero_result_; }
+bool QueryExecutor::zero_result() {
+    return zero_result_;
+}
 
-double QueryExecutor::query_duration() { return query_duration_.count(); }
+double QueryExecutor::query_duration() {
+    return query_duration_.count();
+}
 
-uint QueryExecutor::variable_cnt() { return plan_.size(); }
+uint QueryExecutor::variable_cnt() {
+    return plan_.size();
+}
 
-std::vector<ResultMap> &QueryExecutor::result_map() { return result_map_; }
+std::vector<ResultMap>& QueryExecutor::result_map() {
+    return result_map_;
+}
 
-std::vector<std::vector<std::pair<uint, uint>>> &QueryExecutor::result_relation() { return result_relation_; }
+std::vector<std::vector<std::pair<uint, uint>>>& QueryExecutor::result_relation() {
+    return result_relation_;
+}
 
 bool QueryExecutor::query_end() {
     if (zero_result_)
@@ -868,4 +928,10 @@ bool QueryExecutor::query_end() {
     return false;
 }
 
-std::string QueryExecutor::query_graph() { return query_graph_.ToString(); }
+std::string QueryExecutor::query_graph() {
+    return query_graph_.ToString();
+}
+
+int QueryExecutor::reward() {
+    return query_graph_.reward();
+}

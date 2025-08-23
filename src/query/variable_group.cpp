@@ -95,8 +95,6 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
                 }
             }
         }
-
-        std::cout << "results_: " << results_.size() << std::endl;
     }
     std::cout << "1 build variable groups: "
               << std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - begin).count()

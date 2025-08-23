@@ -9,7 +9,7 @@
 
 namespace avpjoin {
 
-void AVPJoin::Create(const std::string &db_name, const std::string &data_file) {
+void AVPJoin::Create(const std::string& db_name, const std::string& data_file) {
     auto beg = std::chrono::high_resolution_clock::now();
 
     IndexBuilder builder(db_name, data_file);
@@ -23,8 +23,9 @@ void AVPJoin::Create(const std::string &db_name, const std::string &data_file) {
     std::cout << "create " << db_name << " takes " << diff.count() << " ms." << std::endl;
 }
 
-void AVPJoin::Query(const std::string &db_path, const std::string &query_path) {
+void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
+        double total_time = 0;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
         std::ifstream in(query_path, std::ifstream::in);
         std::vector<std::string> sparqls;
@@ -63,20 +64,24 @@ void AVPJoin::Query(const std::string &db_path, const std::string &query_path) {
             std::chrono::duration<double, std::milli> print_time = print_end - print_start;
 
             auto query_end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> total_time = query_end - query_start;
+            std::chrono::duration<double, std::milli> query_time = query_end - query_start;
 
             // Report results and performance metrics
             std::cout << result_count << " result(s)." << std::endl;
             std::cout << "execute takes " << executor.query_duration() << " ms." << std::endl;
             std::cout << "print takes " << print_time.count() << " ms." << std::endl;
-            std::cout << "query cost " << total_time.count() << " ms." << std::endl;
+            std::cout << "query cost " << query_time.count() << " ms." << std::endl;
+
+            total_time += query_time.count();
         }
+        std::cout << "avg time: " << total_time / sparqls.size() << std::endl;
         exit(0);
     }
 }
 
-void AVPJoin::Train(const std::string &db_path, const std::string &query_path) {
+void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
+        double total_time = 0;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
         std::ifstream in(query_path, std::ifstream::in);
         std::vector<std::string> sparqls;
@@ -110,8 +115,14 @@ void AVPJoin::Train(const std::string &db_path, const std::string &query_path) {
 
             service.sendMessage("start");
             service.sendMessage(query_graph);
+
+            double plan_time = 0;
             while (true) {
+                auto start = std::chrono::high_resolution_clock::now();
                 std::string next_variable = service.receiveMessage();
+                plan_time +=
+                    std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start)
+                        .count();
 
                 auto begin = std::chrono::high_resolution_clock::now();
                 executor.ProcessNextVariable(next_variable);
@@ -121,6 +132,7 @@ void AVPJoin::Train(const std::string &db_path, const std::string &query_path) {
                           << std::endl;
 
                 if (!executor.query_end()) {
+                    service.sendMessage(std::to_string(executor.reward()));
                     query_graph = executor.query_graph();
                     service.sendMessage(query_graph);
                 } else {
@@ -138,14 +150,21 @@ void AVPJoin::Train(const std::string &db_path, const std::string &query_path) {
             auto print_end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> print_time = print_end - print_start;
             auto query_end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> total_time = query_end - query_start;
+            std::chrono::duration<double, std::milli> query_time = query_end - query_start;
             std::cout << result_count << " result(s)." << std::endl;
             std::cout << "execute takes " << executor.query_duration() << " ms." << std::endl;
             std::cout << "print takes " << print_time.count() << " ms." << std::endl;
-            std::cout << "query cost " << total_time.count() << " ms." << std::endl;
+            std::cout << "query cost " << query_time.count() << " ms." << std::endl;
+            std::cout << "plan_time " << plan_time << " ms." << std::endl;
+
+            total_time += query_time.count() - plan_time;
         }
+        service.sendMessage("train end");
+
+        std::cout << "avg time: " << total_time / sparqls.size() << std::endl;
+
         exit(0);
     }
 }
 
-} // namespace avpjoin
+}  // namespace avpjoin
