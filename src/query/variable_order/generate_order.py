@@ -9,7 +9,6 @@ import logging
 
 from torch.distributions import Categorical
 from torch_geometric.nn import GCNConv
-from torch_geometric.data import Data
 
 
 class GraphActorCritic(nn.Module):
@@ -176,19 +175,18 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         model.train()  # 确保模型处于训练模式
         action_logits, value = model(query_graph)
 
+        vertices = query_graph["vertices"]
         # 创建概率分布
         dist = Categorical(logits=action_logits)
         action = dist.sample()
-
-        # 获取选择的顶点名称
-        vertices = query_graph["vertices"]
         action_idx = action.item()
 
         if action_idx < len(vertices) and vertex_status[action_idx] == 1:
             selected_vertex = vertices[action_idx]
         else:
-            # 如果选择无效，从可选节点中随机选择一个
             candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
+            if len(candidate_indices) == 0:
+                candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
             action_idx = np.random.choice(candidate_indices)
             selected_vertex = vertices[action_idx]
             logger.warning(
@@ -262,7 +260,7 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
 
         # 计算新的对数概率
         new_log_probs = []
-        for i, (action_logits, action) in enumerate(zip(all_action_logits, actions)):
+        for _, (action_logits, action) in enumerate(zip(all_action_logits, actions)):
             dist = Categorical(logits=action_logits)
             new_log_probs.append(dist.log_prob(action))
 
@@ -302,16 +300,19 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
 
 
 def select_vertex_gnn(query_graph, model):
-    status = query_graph["status"]
-    candidate_indices = [i for i, s in enumerate(status) if s == 1]
-
+    vertex_status = query_graph["status"]
+    vertices = query_graph["vertices"]
+    candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
+    if len(candidate_indices) == 0:
+        candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
+                
     if not candidate_indices:
         logger.warning("No selectable nodes (status=1) in query graph.")
         return None
 
     # 如果只有一个可选节点，直接返回
     if len(candidate_indices) == 1:
-        return query_graph["vertices"][candidate_indices[0]]
+        return vertices[candidate_indices[0]]
 
     model.eval()  # 切换到评估模式
     with torch.no_grad():  # 禁用梯度计算
