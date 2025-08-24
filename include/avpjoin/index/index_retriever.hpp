@@ -111,14 +111,14 @@ class IndexRetriever {
      * @param sid The subject ID.
      * @return A span of triples.
      */
-    std::span<uint> GetByS(uint sid);
+    std::vector<uint>* GetByS(uint sid);
 
     /**
      * @brief Retrieves the set of subjects by object ID.
      * @param oid The object ID.
      * @return A span of triples.
      */
-    std::span<uint> GetByO(uint oid);
+    std::vector<uint>* GetByO(uint oid);
 
     /**
      * @brief Retrieves the set of objects by subject and predicate IDs.
@@ -126,7 +126,7 @@ class IndexRetriever {
      * @param pid The predicate ID.
      * @return A span of triples.
      */
-    std::span<uint> GetBySP(uint sid, uint pid);
+    std::vector<uint>* GetBySP(uint sid, uint pid);
 
     /**
      * @brief Retrieves the set of subjects by object and predicate IDs.
@@ -134,7 +134,7 @@ class IndexRetriever {
      * @param pid The predicate ID.
      * @return A span of triples.
      */
-    std::span<uint> GetByOP(uint oid, uint pid);
+    std::vector<uint>* GetByOP(uint oid, uint pid);
 
     /**
      * @brief Retrieves the set of predicates by subject and object IDs.
@@ -142,7 +142,7 @@ class IndexRetriever {
      * @param oid The object ID.
      * @return A span of triples.
      */
-    std::span<uint> GetBySO(uint sid, uint oid);
+    std::vector<uint>* GetBySO(uint sid, uint oid);
 
     /**
      * @brief Retrieves the count of subjects for a given predicate ID.
@@ -171,30 +171,6 @@ class IndexRetriever {
      * @return The size of the triples.
      */
     uint GetByOSize(uint oid);
-
-    /**
-     * @brief Retrieves the count of the objects by subject and predicate IDs.
-     * @param sid The subject ID.
-     * @param pid The predicate ID.
-     * @return The size of the triples.
-     */
-    uint GetBySPSize(uint sid, uint pid);
-
-    /**
-     * @brief Retrieves the count of the subjects by object and predicate IDs.
-     * @param oid The object ID.
-     * @param pid The predicate ID.
-     * @return The size of the triples.
-     */
-    uint GetByOPSize(uint oid, uint pid);
-
-    /**
-     * @brief Retrieves the count of the predicates by subject and object IDs.
-     * @param sid The subject ID.
-     * @param oid The object ID.
-     * @return The size of the triples.
-     */
-    uint GetBySOSize(uint sid, uint oid);
 
     /**
      * @brief Retrieves the count of predicates.

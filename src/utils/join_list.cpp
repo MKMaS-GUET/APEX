@@ -23,8 +23,26 @@ void JoinList::AddList(const std::span<uint>& list) {
                 return;
             }
     }
-
     lists_.push_back(list);
+}
+
+void JoinList::AddList(std::vector<uint>* list) {
+    need_to_delete_.push_back(list);
+    std::span<uint> span_list = std::span<uint>(list->data(), list->size());
+    if (lists_.size() == 0 || list->size() == 0) {
+        lists_.push_back(span_list);
+        return;
+    }
+    uint first_val = (*list)[0];
+    for (long unsigned int i = 0; i < lists_.size(); i++) {
+        if (lists_[i].size() > 0)
+            if (lists_[i][0] > first_val) {
+                lists_.insert(lists_.begin() + i, span_list);
+                return;
+            }
+    }
+
+    lists_.push_back(span_list);
 }
 
 void JoinList::AddLists(const std::vector<std::span<uint>>& lists) {
@@ -92,6 +110,9 @@ bool JoinList::AtEnd(int i) {
 }
 
 void JoinList::Clear() {
+    for (auto& list : need_to_delete_)
+        delete list;
+
     lists_.clear();
     list_current_pos_.clear();
 }

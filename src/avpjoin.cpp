@@ -141,6 +141,84 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
             }
             service.sendMessage("end");
 
+            auto query_end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::milli> query_time = query_end - query_start;
+            std::cout << "execute takes " << executor.query_duration() << " ms." << std::endl;
+            std::cout << "query cost " << query_time.count() << " ms." << std::endl;
+            std::cout << "plan_time " << plan_time << " ms." << std::endl;
+
+            total_time += query_time.count() - plan_time;
+        }
+        service.sendMessage("train end");
+
+        std::cout << "avg time: " << total_time / sparqls.size() << std::endl;
+
+        exit(0);
+    }
+}
+
+void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
+    if (db_path != "" and query_path != "") {
+        double total_time = 0;
+        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
+        std::ifstream in(query_path, std::ifstream::in);
+        std::vector<std::string> sparqls;
+        if (in.is_open()) {
+            std::string line;
+            std::string sparql;
+            while (std::getline(in, sparql)) {
+                sparqls.push_back(sparql);
+            }
+            in.close();
+        }
+
+        UDPService service = UDPService(2077, 2078);
+
+        std::ios::sync_with_stdio(false);
+        for (long unsigned int i = 0; i < sparqls.size(); i++) {
+            std::string sparql = sparqls[i];
+
+            if (sparqls.size() > 1) {
+                std::cout << i + 1 << " ------------------------------------------------------------------"
+                          << std::endl;
+                std::cout << sparql << std::endl;
+            }
+
+            auto query_start = std::chrono::high_resolution_clock::now();
+
+            SPARQLParser parser = SPARQLParser(sparql);
+            QueryExecutor executor = QueryExecutor(index, parser.TriplePatterns(), parser.Limit(), true);
+
+            std::string query_graph = executor.query_graph();
+
+            service.sendMessage("start");
+            service.sendMessage(query_graph);
+
+            double plan_time = 0;
+            while (true) {
+                auto start = std::chrono::high_resolution_clock::now();
+                std::string next_variable = service.receiveMessage();
+                plan_time +=
+                    std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start)
+                        .count();
+
+                auto begin = std::chrono::high_resolution_clock::now();
+                executor.ProcessNextVariable(next_variable);
+                auto end = std::chrono::high_resolution_clock::now();
+                std::cout << "Processing " << next_variable
+                          << " takes: " << std::chrono::duration<double, std::milli>(end - begin).count() << " ms"
+                          << std::endl;
+
+                if (!executor.query_end()) {
+                    service.sendMessage(std::to_string(executor.reward()));
+                    query_graph = executor.query_graph();
+                    service.sendMessage(query_graph);
+                } else {
+                    break;
+                }
+            }
+            service.sendMessage("end");
+
             auto print_start = std::chrono::high_resolution_clock::now();
             uint result_count = 0;
             if (!executor.zero_result()) {
@@ -159,7 +237,6 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
 
             total_time += query_time.count() - plan_time;
         }
-        service.sendMessage("train end");
 
         std::cout << "avg time: " << total_time / sparqls.size() << std::endl;
 

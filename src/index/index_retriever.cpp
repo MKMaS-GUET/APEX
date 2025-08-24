@@ -103,7 +103,7 @@ std::span<uint> IndexRetriever::GetOPreSet(uint oid) {
 }
 
 // s p ?o
-std::span<uint> IndexRetriever::GetBySP(uint sid, uint pid) {
+std::vector<uint>* IndexRetriever::GetBySP(uint sid, uint pid) {
     if (0 < sid && sid <= max_subject_id_) {
         uint cs_id = cs_daa_map_.ChararisticSetIdOf(sid, CsDaaMap::Permutation::kSPO);
         const auto& char_set = subject_characteristic_set_[cs_id];
@@ -115,11 +115,11 @@ std::span<uint> IndexRetriever::GetBySP(uint sid, uint pid) {
             return spo_.AccessDAA(offset, size, predicate_index_.GetOSet(pid), index);
         }
     }
-    return std::span<uint>();
+    return new std::vector<uint>();
 }
 
 // ?s p o
-std::span<uint> IndexRetriever::GetByOP(uint oid, uint pid) {
+std::vector<uint>* IndexRetriever::GetByOP(uint oid, uint pid) {
     if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid) {
         uint cs_id = cs_daa_map_.ChararisticSetIdOf(oid, CsDaaMap::Permutation::kOPS);
         const auto& char_set = object_characteristic_set_[cs_id];
@@ -131,10 +131,10 @@ std::span<uint> IndexRetriever::GetByOP(uint oid, uint pid) {
             return ops_.AccessDAA(offset, size, predicate_index_.GetSSet(pid), index);
         }
     }
-    return std::span<uint>();
+    return new std::vector<uint>();
 }
 // s ?p o
-std::span<uint> IndexRetriever::GetBySO(uint sid, uint oid) {
+std::vector<uint>* IndexRetriever::GetBySO(uint sid, uint oid) {
     std::vector<uint>* result = new std::vector<uint>;
 
     if ((0 < sid && sid <= max_subject_id_) && (oid <= dict_.shared_cnt() || max_subject_id_ < oid)) {
@@ -151,7 +151,7 @@ std::span<uint> IndexRetriever::GetBySO(uint sid, uint oid) {
             for (uint j = 0; j < o_c_set.size(); j++) {
                 if (s_c_set[i] == o_c_set[j]) {
                     auto r = GetBySP(sid, s_c_set[i]);
-                    bool found = std::binary_search(r.begin(), r.end(), original_oid);
+                    bool found = std::binary_search(r->begin(), r->end(), original_oid);
                     if (found)
                         result->push_back(s_c_set[i]);
                 }
@@ -159,10 +159,10 @@ std::span<uint> IndexRetriever::GetBySO(uint sid, uint oid) {
         }
     }
 
-    return std::span<uint>(*result);
+    return result;
 }
 
-std::span<uint> IndexRetriever::GetByS(uint sid) {
+std::vector<uint>* IndexRetriever::GetByS(uint sid) {
     if (0 < sid && sid <= max_subject_id_) {
         uint cs_id = cs_daa_map_.ChararisticSetIdOf(sid, CsDaaMap::Permutation::kSPO);
         const auto& char_set = subject_characteristic_set_[cs_id];
@@ -171,15 +171,16 @@ std::span<uint> IndexRetriever::GetByS(uint sid) {
             offset2id.push_back(predicate_index_.GetOSet(pid));
 
         auto [offset, size] = cs_daa_map_.DAAOffsetSizeOf(sid, CsDaaMap::Permutation::kSPO);
-        std::span<uint> result = spo_.AccessDAAAllArrays(offset, size, offset2id);
-        std::sort(result.begin(), result.end());
-        auto it = std::unique(result.begin(), result.end());
-        return std::span<uint>(result.begin(), std::distance(result.data(), &*it));
+        std::vector<uint>* result = spo_.AccessDAAAllArrays(offset, size, offset2id);
+        std::sort(result->begin(), result->end());
+        auto it = std::unique(result->begin(), result->end());
+        result->erase(it, result->end());
+        return result;
     }
-    return std::span<uint>();
+    return new std::vector<uint>();
 }
 
-std::span<uint> IndexRetriever::GetByO(uint oid) {
+std::vector<uint>* IndexRetriever::GetByO(uint oid) {
     if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid) {
         uint cs_id = cs_daa_map_.ChararisticSetIdOf(oid, CsDaaMap::Permutation::kOPS);
         const auto& char_set = object_characteristic_set_[cs_id];
@@ -188,12 +189,13 @@ std::span<uint> IndexRetriever::GetByO(uint oid) {
             offset2id.push_back(predicate_index_.GetSSet(pid));
 
         auto [offset, size] = cs_daa_map_.DAAOffsetSizeOf(oid, CsDaaMap::Permutation::kOPS);
-        std::span<uint> result = ops_.AccessDAAAllArrays(offset, size, offset2id);
-        std::sort(result.begin(), result.end());
-        auto it = std::unique(result.begin(), result.end());
-        return std::span<uint>(result.begin(), std::distance(result.data(), &*it));
+        std::vector<uint>* result = ops_.AccessDAAAllArrays(offset, size, offset2id);
+        std::sort(result->begin(), result->end());
+        auto it = std::unique(result->begin(), result->end());
+        result->erase(it, result->end());
+        return result;
     }
-    return std::span<uint>();
+    return new std::vector<uint>();
 }
 
 uint IndexRetriever::GetSSetSize(uint pid) {
@@ -214,18 +216,6 @@ uint IndexRetriever::GetByOSize(uint oid) {
     if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid)
         return cs_daa_map_.DAAOffsetSizeOf(oid, CsDaaMap::Permutation::kOPS).second;
     return 0;
-}
-
-uint IndexRetriever::GetBySPSize(uint sid, uint pid) {
-    return GetBySP(sid, pid).size();
-}
-
-uint IndexRetriever::GetByOPSize(uint oid, uint pid) {
-    return GetByOP(oid, pid).size();
-}
-
-uint IndexRetriever::GetBySOSize(uint sid, uint oid) {
-    return GetBySO(sid, oid).size();
 }
 
 uint IndexRetriever::predicate_cnt() {

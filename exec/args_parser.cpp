@@ -47,6 +47,23 @@ void ArgsParser::Train(const std::unordered_map<std::string, std::string>& args)
         arguments_[arg_file_] = "";
 }
 
+void ArgsParser::Test(const std::unordered_map<std::string, std::string>& args) {
+    if (args.count("-h") || args.count("--help")) {
+        std::cout << help_info_ << std::endl;
+        exit(1);
+    }
+
+    if (args.count("-d"))
+        arguments_[arg_db_path_] = args.count("-d") ? args.at("-d") : args.at("--database");
+
+    if (args.count("-f"))
+        arguments_[arg_file_] = args.at("-f");
+    else if (args.count("--file"))
+        arguments_[arg_file_] = args.at("--file");
+    else
+        arguments_[arg_file_] = "";
+}
+
 ArgsParser::CommandT ArgsParser::Parse(int argc, char** argv) {
     if (argc == 1) {
         std::cout << help_info_ << std::endl;

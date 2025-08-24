@@ -22,6 +22,8 @@ class JoinList {
 
     bool using_bin_search_ = true;
 
+    std::vector<std::vector<uint>*> need_to_delete_;
+
    public:
     JoinList();
 
@@ -32,6 +34,8 @@ class JoinList {
      * @param list A span representing the list to be added.
      */
     void AddList(const std::span<uint>& list);
+
+    void AddList(std::vector<uint>* list);
 
     /**
      * @brief Adds multiple lists to the collection.

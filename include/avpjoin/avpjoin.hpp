@@ -17,6 +17,8 @@ class AVPJoin {
     static void Query(const std::string& db_path, const std::string& data_file);
 
     static void Train(const std::string& db_path, const std::string& query_path);
+    
+    static void Test(const std::string& db_path, const std::string& query_path);
 };
 
 }  // namespace avpjoin

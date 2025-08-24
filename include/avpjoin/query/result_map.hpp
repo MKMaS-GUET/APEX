@@ -26,6 +26,6 @@ struct VectorHash {
     }
 };
 
-using ResultMap = phmap::flat_hash_map<std::vector<uint>, std::span<uint>, VectorHash>;
+using ResultMap = phmap::flat_hash_map<std::vector<uint>, std::vector<uint>*, VectorHash>;
 
 #endif

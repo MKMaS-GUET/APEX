@@ -20,15 +20,20 @@ class GraphActorCritic(nn.Module):
         self.conv1 = GCNConv(node_feature_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, hidden_dim)
 
-        # Actor和Critic头
+        # Actor头
         self.actor = nn.Sequential(
             nn.Linear(hidden_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1),
         )
 
+        # Critic头 - 直接处理二维输入并输出单个值
         self.critic = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim * 2, hidden_dim * 2),  # 处理每个节点的特征
+            nn.ReLU(),
+            nn.Linear(hidden_dim * 2, hidden_dim),  # 进一步处理
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),  # 输出单个值
         )
 
     def build_node_features(self, query_graph):
@@ -133,10 +138,14 @@ class GraphActorCritic(nn.Module):
         # 屏蔽不可选择的节点（status != 1）
         status = torch.tensor(query_graph["status"], dtype=torch.float32, device=device)
         mask = (status == 1).float()
+        if mask.sum() == 0:
+            mask = (status == 0).float()
         action_logits = action_logits * mask + (1 - mask) * (-1e9)
 
-        # Critic输出
-        state_value = self.critic(graph_representation.unsqueeze(0))  # [1, 1]
+        # Critic输出 - 直接处理二维输入并输出单个值
+        # 使用全局池化来处理二维输入
+        pooled_features = torch.mean(combined_features, dim=0)  # [hidden_dim * 2]
+        state_value = self.critic(pooled_features.unsqueeze(0))  # [1, 1]
 
         return action_logits, state_value.squeeze()
 
@@ -163,14 +172,14 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         query_graph = json.loads(msg)
 
         # 检查是否有可选择的节点
+        # print(query_graph)
         vertex_status = query_graph["status"]
-        if 1 not in vertex_status:
-            logger.warning("No selectable nodes (status=1) in this state.")
-            # 发送默认选择
-            service.send_message(query_graph["vertices"][0])
-            continue
+        # if 1 not in vertex_status:
+        #     logger.warning("No selectable nodes (status=1) in this state.")
+        #     # 发送默认选择
+        #     service.send_message(query_graph["vertices"][0])
+        #     continue
 
-        print(query_graph)
         # 使用图神经网络模型
         model.train()  # 确保模型处于训练模式
         action_logits, value = model(query_graph)
@@ -181,17 +190,18 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         action = dist.sample()
         action_idx = action.item()
 
-        if action_idx < len(vertices) and vertex_status[action_idx] == 1:
-            selected_vertex = vertices[action_idx]
-        else:
-            candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
-            if len(candidate_indices) == 0:
-                candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
-            action_idx = np.random.choice(candidate_indices)
-            selected_vertex = vertices[action_idx]
-            logger.warning(
-                f"Selected invalid node, falling back to random selection: {selected_vertex}"
-            )
+        selected_vertex = vertices[action_idx]
+        # if action_idx < len(vertices) and vertex_status[action_idx] == 1:
+        #     selected_vertex = vertices[action_idx]
+        # else:
+        #     candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
+        #     if len(candidate_indices) == 0:
+        #         candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
+        #     action_idx = np.random.choice(candidate_indices)
+        #     selected_vertex = vertices[action_idx]
+        #     logger.warning(
+        #         f"Selected invalid node, falling back to random selection: {selected_vertex}"
+        #     )
 
         # 发送选择的动作
         service.send_message(selected_vertex)
@@ -224,11 +234,17 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         logger.warning("No data collected in this episode.")
         return 0
 
-    # 转换为张量
+    # 计算奖励的最大值和最小值
+    reward_max = max(rewards)
+    reward_min = min(rewards)
+    # 对奖励进行归一化
+    normalized_rewards = [
+        (r - reward_min) / (reward_max - reward_min + 1e-8) for r in rewards
+    ]
     returns = []
     R = 0
-    for r in reversed(rewards):
-        R = r + 0.99 * R  # 折扣因子
+    for r in reversed(normalized_rewards):
+        R = r + 0.95 * R  # 折扣因子
         returns.insert(0, R)
 
     returns = torch.tensor(returns, device=device, dtype=torch.float32)
@@ -287,7 +303,7 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         optimizer.step()
 
     # 计算总奖励
-    total_reward = sum(rewards)
+    total_reward = sum(normalized_rewards)
     avg_policy_loss = np.mean(policy_losses)
     avg_value_loss = np.mean(value_losses)
 
@@ -305,7 +321,7 @@ def select_vertex_gnn(query_graph, model):
     candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
     if len(candidate_indices) == 0:
         candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
-                
+
     if not candidate_indices:
         logger.warning("No selectable nodes (status=1) in query graph.")
         return None

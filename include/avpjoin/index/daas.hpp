@@ -51,9 +51,9 @@ class DAAs {
 
     uint AccessLevels(ulong offset);
 
-    std::span<uint> AccessDAA(uint daa_offset, uint daa_size, std::span<uint>& offset2id, uint index);
+    std::vector<uint>* AccessDAA(uint daa_offset, uint daa_size, std::span<uint>& offset2id, uint index);
 
-    std::span<uint> AccessDAAAllArrays(uint daa_offset, uint daa_size, std::vector<std::span<uint>>& offset2id);
+    std::vector<uint>* AccessDAAAllArrays(uint daa_offset, uint daa_size, std::vector<std::span<uint>>& offset2id);
 
     uint daa_levels_width();
 

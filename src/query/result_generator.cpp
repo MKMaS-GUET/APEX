@@ -13,14 +13,15 @@ ResultGenerator::ResultGenerator(QueryExecutor& executor, SPARQLParser& parser) 
         result_map_keys_[i].resize(result_map_->at(i).begin()->first.size(), 0);
 
     result_relation_ = executor.result_relation();
-
     uint size = 1;
     for (auto& result : *result_map_)
         size *= result.size();
     results_ = std::make_shared<std::vector<std::vector<uint>>>();
     results_->reserve(size);
     current_result_ = std::vector<uint>(result_map_->size(), 0);
-    candidate_value_ = std::vector<std::span<uint>>(result_map_->size());
+    candidate_value_ = std::vector<std::vector<uint>*>();
+    for (uint i = 0; i < result_map_->size();i++) 
+        candidate_value_.push_back(new std::vector<uint>());
     candidate_idx_ = std::vector<uint>(result_map_->size(), 0);
 
     var_print_order_ = parser.ProjectVariables();
@@ -38,7 +39,7 @@ ResultGenerator::~ResultGenerator() {
 }
 
 void ResultGenerator::Up() {
-    candidate_value_[variable_id_] = std::span<uint>();
+    candidate_value_[variable_id_] = new std::vector<uint>();
     candidate_idx_[variable_id_] = 0;
 
     --variable_id_;
@@ -47,7 +48,7 @@ void ResultGenerator::Up() {
 void ResultGenerator::Down() {
     ++variable_id_;
 
-    if (candidate_value_[variable_id_].empty()) {
+    if (candidate_value_[variable_id_]->empty()) {
         GenCandidateValue();
         if (at_end_)
             return;
@@ -70,17 +71,17 @@ void ResultGenerator::GenCandidateValue() {
     if (it != result_map_->at(variable_id_).end())
         candidate_value_[variable_id_] = it->second;
     else
-        candidate_value_[variable_id_] = std::span<uint>();
+        candidate_value_[variable_id_] = new std::vector<uint>();
 
-    if (candidate_value_[variable_id_].empty())
+    if (candidate_value_[variable_id_]->empty())
         at_end_ = true;
 }
 
 bool ResultGenerator::UpdateCurrentResult() {
     size_t idx = candidate_idx_[variable_id_];
 
-    if (idx < candidate_value_[variable_id_].size()) {
-        uint value = candidate_value_[variable_id_][idx];
+    if (idx < candidate_value_[variable_id_]->size()) {
+        uint value = candidate_value_[variable_id_]->at(idx);
         candidate_idx_[variable_id_]++;
         current_result_[variable_id_] = value;
 

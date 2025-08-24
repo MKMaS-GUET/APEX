@@ -16,6 +16,7 @@ class ArgsParser {
         kBuild,
         kQuery,
         kTrain,
+        kTest,
     };
 
     const std::string arg_db_path_ = "path";
@@ -28,15 +29,14 @@ class ArgsParser {
    private:
     std::unordered_map<std::string, CommandT> position_ = {
         {"-h", CommandT::kNone},     {"--help", CommandT::kNone}, {"build", CommandT::kBuild},
-        {"query", CommandT::kQuery}, {"train", CommandT::kTrain},
+        {"query", CommandT::kQuery}, {"train", CommandT::kTrain}, {"test", CommandT::kTest}
     };
 
     std::unordered_map<std::string, void (ArgsParser::*)(const std::unordered_map<std::string, std::string>&)>
-        selector_ = {
-            {"build", &ArgsParser::Build},
-            {"query", &ArgsParser::Query},
-            {"train", &ArgsParser::Train},
-    };
+        selector_ = {{"build", &ArgsParser::Build},
+                     {"query", &ArgsParser::Query},
+                     {"train", &ArgsParser::Train},
+                     {"test", &ArgsParser::Test}};
 
     const std::string help_info_ =
         "Usage: avpjoin [COMMAND] [OPTIONS]\n"
@@ -86,6 +86,8 @@ class ArgsParser {
     void Query(const std::unordered_map<std::string, std::string>& args);
 
     void Train(const std::unordered_map<std::string, std::string>& args);
+
+    void Test(const std::unordered_map<std::string, std::string>& args);
 
     inline bool IsNumber(const std::string& s) {
         return std::all_of(s.begin(), s.end(), [](char c) { return std::isdigit(c); });

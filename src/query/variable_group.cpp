@@ -8,11 +8,35 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
                              Group group) {
     level_ = -1;
     at_end_ = false;
-    auto begin = std::chrono::high_resolution_clock::now();
+
+    std::vector<uint> intersection = group.ancestors[0];
+
+    for (size_t i = 1; i < group.ancestors.size(); ++i) {
+        if (!group.ancestors[i].empty()) {
+            std::vector<uint> temp;
+            std::vector<uint> sorted_ancestor = group.ancestors[i];
+            std::sort(intersection.begin(), intersection.end());
+            std::sort(sorted_ancestor.begin(), sorted_ancestor.end());
+
+            set_intersection(intersection.begin(), intersection.end(), sorted_ancestor.begin(), sorted_ancestor.end(),
+                             back_inserter(temp));
+            intersection = std::move(temp);
+        }
+    }
+
+    std::sort(intersection.begin(), intersection.end());
+    uint max_level = intersection.back();
 
     phmap::flat_hash_set<uint> ancestor_union;
-    for (const auto& an : group.ancestors)
-        ancestor_union.insert(an.begin(), an.end());
+    ancestor_union.insert(max_level);
+    for (const auto& an : group.ancestors) {
+        for (auto a : an) {
+            if (a != max_level)
+                ancestor_union.insert(a);
+            else
+                break;
+        }
+    }
 
     std::vector<uint> levels(ancestor_union.begin(), ancestor_union.end());
     std::sort(levels.begin(), levels.end());
@@ -27,18 +51,17 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
         if (first_map.size() > 1) {
             size_t est_size = 0;
             for (auto& [_, set] : first_map)
-                est_size += set.size();
+                est_size += set->size();
 
             std::vector<uint> all_values;
             all_values.reserve(est_size);
             for (auto& [_, set] : first_map)
-                all_values.insert(all_values.end(), set.begin(), set.end());
+                all_values.insert(all_values.end(), set->begin(), set->end());
 
             std::sort(std::execution::par_unseq, all_values.begin(), all_values.end());
             all_values.erase(std::unique(all_values.begin(), all_values.end()), all_values.end());
-
             result_map_.push_back(new ResultMap());
-            result_map_[0]->emplace(std::vector<uint>(0, 0), std::span<uint>(all_values.begin(), all_values.end()));
+            result_map_[0]->emplace(std::vector<uint>(1, 0), &all_values);
         } else {
             result_map_.push_back(&first_map);
         }
@@ -49,7 +72,7 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
         // prepare map keys
         result_map_keys_.resize(result_map.size());
         for (size_t i = 0; i < result_map_.size(); i++)
-            result_map_keys_[i].resize(result_map_[i]->begin()->first.size(), 0);
+            result_map_keys_[i] = std::vector<uint>(result_map_[i]->begin()->first.size(), 0);
 
         // build new result_relation
         std::vector<uint> var_id_to_level = std::vector<uint>(result_relation.size(), 0);
@@ -69,14 +92,16 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
         for (auto& ancestor : group.ancestors)
             var_result_offset.push_back(var_id_to_level[ancestor[0]]);
 
-        uint size = result_map_[0]->begin()->second.size();
+        uint size = result_map_[0]->begin()->second->size();
         for (auto& result : result_map)
             size *= result.size();
         results_ = std::vector<std::vector<uint>>();
         results_.reserve(size);
 
         current_result_ = std::vector<uint>(levels.size(), 0);
-        candidate_value_ = std::vector<std::span<uint>>(result_map.size());
+        candidate_value_ = std::vector<std::vector<uint>*>();
+        for (uint i = 0; i < result_map.size(); i++)
+            candidate_value_.push_back(new std::vector<uint>());
         candidate_idx_ = std::vector<uint>(result_map.size(), 0);
 
         int map_size = result_map_.size();
@@ -96,9 +121,6 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
             }
         }
     }
-    std::cout << "1 build variable groups: "
-              << std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - begin).count()
-              << " ms" << std::endl;
 }
 
 VariableGroup::VariableGroup(Group group) {
@@ -117,12 +139,12 @@ VariableGroup::VariableGroup(ResultMap& map, Group group) {
 
     uint est_size = map.size();
     if (est_size == 1)
-        est_size = map.begin()->second.size();
+        est_size = map.begin()->second->size();
 
     std::vector<uint> all_values;
     all_values.reserve(est_size * 2);
     for (auto& [_, set] : map)
-        all_values.insert(all_values.end(), set.begin(), set.end());
+        all_values.insert(all_values.end(), set->begin(), set->end());
 
     std::sort(std::execution::par_unseq, all_values.begin(), all_values.end());
     all_values.erase(std::unique(all_values.begin(), all_values.end()), all_values.end());
@@ -140,7 +162,7 @@ VariableGroup::~VariableGroup() {
 }
 
 void VariableGroup::Up() {
-    candidate_value_[level_] = std::span<uint>();
+    candidate_value_[level_] = new std::vector<uint>();
     candidate_idx_[level_] = 0;
 
     --level_;
@@ -149,7 +171,7 @@ void VariableGroup::Up() {
 void VariableGroup::Down() {
     ++level_;
 
-    if (candidate_value_[level_].empty()) {
+    if (candidate_value_[level_]->empty()) {
         GenCandidateValue();
         if (at_end_)
             return;
@@ -172,17 +194,17 @@ void VariableGroup::GenCandidateValue() {
     if (it != result_map_[level_]->end())
         candidate_value_[level_] = it->second;
     else
-        candidate_value_[level_] = std::span<uint>();
+        candidate_value_[level_] = new std::vector<uint>();
 
-    if (candidate_value_[level_].empty())
+    if (candidate_value_[level_]->empty())
         at_end_ = true;
 }
 
 bool VariableGroup::UpdateCurrentResult() {
     size_t idx = candidate_idx_[level_];
 
-    if (idx < candidate_value_[level_].size()) {
-        uint value = candidate_value_[level_][idx];
+    if (idx < candidate_value_[level_]->size()) {
+        uint value = candidate_value_[level_]->at(idx);
         candidate_idx_[level_]++;
         current_result_[level_] = value;
 

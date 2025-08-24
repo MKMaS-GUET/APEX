@@ -18,7 +18,7 @@ class ResultGenerator {
 
     std::vector<uint> current_result_;
 
-    std::vector<std::span<uint>> candidate_value_;
+    std::vector<std::vector<uint>*> candidate_value_;
 
     std::vector<uint> candidate_idx_;
 

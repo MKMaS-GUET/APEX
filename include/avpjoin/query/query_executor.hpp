@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "avpjoin/index/index_retriever.hpp"
+#include "avpjoin/query/variable.hpp"
 #include "avpjoin/query/variable_group.hpp"
 #include "avpjoin/utils/join_list.hpp"
 #include "result_map.hpp"
@@ -20,43 +21,6 @@ using TripplePattern = std::vector<std::array<SPARQLParser::Term, 3>>;
 
 class QueryExecutor {
    public:
-    struct Variable {
-        std::string variable;
-
-        Position position;
-
-        uint triple_constant_id;
-
-        Position triple_constant_pos;
-
-        std::span<uint> pre_retrieve;
-
-        int total_set_size;
-
-        Variable* connection;
-
-        bool is_none;
-
-        bool is_single;
-
-        int var_id;
-
-        Variable();
-
-        Variable(std::string variable, Position position, std::span<uint> pre_retrieve);
-
-        Variable(std::string variable,
-                 Position position,
-                 uint triple_constant_id,
-                 Position triple_constant_pos,
-                 std::shared_ptr<IndexRetriever> index);
-
-        std::span<uint> Retrieve(uint key);
-
-       private:
-        std::shared_ptr<IndexRetriever> index_;
-    };
-
     struct Edge {
         uint id;
         Position pos;
@@ -105,13 +69,15 @@ class QueryExecutor {
 
     uint result_limit_;
 
+    uint cur_limit_ = 0;
+
     std::shared_ptr<IndexRetriever> index_;
 
     phmap::flat_hash_map<std::string, std::list<Variable>> str2var_;
 
     std::vector<std::pair<std::string, std::vector<Variable*>>> plan_;
 
-    std::vector<std::string> remaining_variables_;
+    phmap::flat_hash_set<std::string> remaining_variables_;
 
     std::vector<ResultMap> result_map_;
 
@@ -125,15 +91,16 @@ class QueryExecutor {
 
     std::string NextVarieble();
 
-    std::span<uint> LeapfrogJoin(JoinList& lists);
+    std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
-    uint ParallelJoin(std::vector<QueryExecutor::Variable*> vars,
+    uint ParallelJoin(std::vector<Variable*> vars,
                       std::vector<VariableGroup*> variable_groups,
-                      ResultMap& result);
+                      ResultMap& result,
+                      uint limit);
 
     std::vector<VariableGroup::Group> GetVariableGroup();
 
-    std::vector<VariableGroup*> GetResultRelationAndVariableGroup(std::vector<QueryExecutor::Variable*>& vars);
+    std::vector<VariableGroup*> GetResultRelationAndVariableGroup(std::vector<Variable*>& vars);
 
    public:
     QueryExecutor(std::shared_ptr<IndexRetriever> index,

@@ -19,7 +19,7 @@ class VariableGroup {
 
     std::vector<std::vector<uint>> result_map_keys_;
 
-    std::vector<std::span<uint>> candidate_value_;
+    std::vector<std::vector<uint>*> candidate_value_;
 
     std::vector<uint> candidate_idx_;
 
