@@ -8,105 +8,53 @@
 #include <vector>
 
 #include "avpjoin/index/index_retriever.hpp"
-#include "avpjoin/query/variable.hpp"
-#include "avpjoin/query/variable_group.hpp"
 #include "avpjoin/utils/join_list.hpp"
-#include "result_map.hpp"
+#include "result_generator.hpp"
+#include "variable_group.hpp"
 
 using Term = SPARQLParser::Term;
 
 using Position = Term::Position;
 
-using TripplePattern = std::vector<std::array<SPARQLParser::Term, 3>>;
-
 class QueryExecutor {
-   public:
-    struct Edge {
-        uint id;
-        Position pos;
-        uint dst;
-
-        Edge(uint id, Position pos, uint dst);
-    };
-
-    struct QueryGraph {
-        phmap::flat_hash_map<std::string, uint> vertexes;
-
-        // -1:被选择过 0:没有被选择 1:下一步可选
-        phmap::flat_hash_map<uint, int> vertex_status;
-
-        phmap::flat_hash_map<uint, uint> est_size;
-
-        phmap::flat_hash_map<uint, uint> est_size_updated;
-
-        phmap::flat_hash_map<uint, std::vector<Edge>> adjacency_list;
-
-        uint pre_est_size = __UINT32_MAX__;
-
-        int vertex_reward;
-
-        QueryGraph() = default;
-
-        void AddVertex(std::pair<std::string, uint> vertex);
-
-        void AddEdge(std::pair<std::string, uint> src,
-                     std::pair<std::string, uint> dst,
-                     std::pair<uint, Position> edge);
-
-        void UpdateQueryGraph(std::string variable, uint result_map_len);
-
-        std::string ToString();
-
-        int reward();
-    };
-
    private:
     bool zero_result_;
 
-    bool train_;
-
     uint variable_id_;
 
-    uint result_limit_;
-
-    uint cur_limit_ = 0;
+    PreProcessor* pre_processor_;
 
     std::shared_ptr<IndexRetriever> index_;
 
-    phmap::flat_hash_map<std::string, std::list<Variable>> str2var_;
-
     std::vector<std::pair<std::string, std::vector<Variable*>>> plan_;
-
+    std::vector<std::string> variable_order_;
     phmap::flat_hash_set<std::string> remaining_variables_;
 
     std::vector<ResultMap> result_map_;
-
     std::vector<std::vector<std::pair<uint, uint>>> result_relation_;
+    ResultGenerator* result_generator_;
 
-    QueryGraph query_graph_;
+    uint result_limit_;
+    uint batch_size_;
+    std::pair<uint, uint> first_variable_range_;
+    uint first_variable_result_len_;
 
-    std::chrono::duration<double, std::milli> query_duration_;
+    bool processed_flag_;
 
-    bool query_end_ = false;
+    std::chrono::duration<double, std::milli> execute_cost_;
 
     std::string NextVarieble();
 
     std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
-    uint ParallelJoin(std::vector<Variable*> vars,
-                      std::vector<VariableGroup*> variable_groups,
-                      ResultMap& result,
-                      uint limit);
+    uint ParallelJoin(std::vector<Variable*> vars, std::vector<VariableGroup*> variable_groups, ResultMap& result);
 
     std::vector<VariableGroup::Group> GetVariableGroup();
 
     std::vector<VariableGroup*> GetResultRelationAndVariableGroup(std::vector<Variable*>& vars);
 
    public:
-    QueryExecutor(std::shared_ptr<IndexRetriever> index,
-                  const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
-                  uint limit,
-                  bool train);
+    QueryExecutor(PreProcessor& pre_preocessor, std::shared_ptr<IndexRetriever> index, uint limit);
 
     ~QueryExecutor();
 
@@ -114,13 +62,13 @@ class QueryExecutor {
 
     void Query();
 
-    std::vector<std::pair<uint, Position>> MappingVariable(const std::vector<std::string>& variables);
+    uint PrintResult(SPARQLParser& parser);
 
     bool zero_result();
 
-    double query_duration();
+    double execute_cost();
 
-    uint variable_cnt();
+    double gen_result_cost();
 
     std::vector<ResultMap>& result_map();
 

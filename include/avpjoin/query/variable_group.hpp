@@ -27,6 +27,8 @@ class VariableGroup {
 
     std::vector<std::vector<uint>> results_;
 
+    std::vector<uint> empty;
+
     void Up();
 
     void Down();
@@ -91,12 +93,15 @@ class VariableGroup {
     VariableGroup() = default;
 
     VariableGroup(std::vector<ResultMap>& result_map,
+                  std::pair<uint, uint> range,
                   std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
                   Group group);
 
     VariableGroup(Group group);
 
     VariableGroup(ResultMap& map, Group group);
+
+    VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group group);
 
     ~VariableGroup();
 

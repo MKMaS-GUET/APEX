@@ -1,36 +1,31 @@
 #ifndef RESULT_GENERATOR_HPP
 #define RESULT_GENERATOR_HPP
 
-#include "query_executor.hpp"
+#include "avpjoin/index/index_retriever.hpp"
+#include "pre_processor.hpp"
+#include "result_map.hpp"
 
 class ResultGenerator {
     int variable_id_;
 
     bool at_end_ = false;
 
-    std::shared_ptr<std::vector<std::vector<uint>>> results_;
+    std::vector<std::vector<uint>> results_;
 
     std::vector<ResultMap>* result_map_;
-
+    std::pair<uint, uint> first_variable_range_;
     std::vector<std::vector<uint>> result_map_keys_;
-
     std::vector<std::vector<std::pair<uint, uint>>> result_relation_;
 
     std::vector<uint> current_result_;
-
     std::vector<std::vector<uint>*> candidate_value_;
-
     std::vector<uint> candidate_idx_;
 
-    std::vector<std::string> var_print_order_;
-
-    SPARQLParser::ProjectModifier modifier_;
-
-    std::vector<std::pair<uint, Position>> var_priorty_positon_;
-
-    uint variable_count_;
-
     uint limit_;
+
+    std::chrono::duration<double, std::milli> gen_cost_;
+
+    std::vector<uint> empty;
 
     void Up();
 
@@ -43,13 +38,15 @@ class ResultGenerator {
     void GenCandidateValue();
 
    public:
-    ResultGenerator() = default;
+    ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation, uint limit);
 
-    ResultGenerator(QueryExecutor& executor, SPARQLParser& parser);
+    bool Update(std::vector<ResultMap>& result_map, std::pair<uint, uint> first_variable_range);
 
     ~ResultGenerator();
 
-    uint PrintResult(IndexRetriever& index);
+    double gen_cost();
+
+    uint PrintResult(IndexRetriever& index, PreProcessor& pre_processor, SPARQLParser& parser);
 
     std::shared_ptr<std::vector<std::vector<uint>>> results();
 };

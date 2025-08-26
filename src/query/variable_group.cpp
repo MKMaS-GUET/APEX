@@ -4,6 +4,7 @@
 #include <iostream>
 
 VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
+                             std::pair<uint, uint> range,
                              std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
                              Group group) {
     level_ = -1;
@@ -53,17 +54,32 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
             for (auto& [_, set] : first_map)
                 est_size += set->size();
 
-            std::vector<uint> all_values;
-            all_values.reserve(est_size);
+            std::vector<uint>* all_values = new std::vector<uint>();
+            all_values->reserve(est_size);
             for (auto& [_, set] : first_map)
-                all_values.insert(all_values.end(), set->begin(), set->end());
+                all_values->insert(all_values->end(), set->begin(), set->end());
 
-            std::sort(std::execution::par_unseq, all_values.begin(), all_values.end());
-            all_values.erase(std::unique(all_values.begin(), all_values.end()), all_values.end());
+            std::sort(std::execution::par_unseq, all_values->begin(), all_values->end());
+            all_values->erase(std::unique(all_values->begin(), all_values->end()), all_values->end());
             result_map_.push_back(new ResultMap());
-            result_map_[0]->emplace(std::vector<uint>(1, 0), &all_values);
+            result_map_[0]->emplace(std::vector<uint>(1, 0), all_values);
         } else {
-            result_map_.push_back(&first_map);
+            if (levels[0] == 0) {
+                std::vector<uint>* map_values = first_map.begin()->second;
+                uint end = range.second > map_values->size() ? map_values->size() : range.second;
+                std::vector<uint>* all_values = new std::vector<uint>();
+                all_values->reserve(end - range.first);
+
+                uint idx = 0;
+                for (uint i = range.first; i < end; i++) {
+                    all_values->push_back(map_values->at(i));
+                    idx++;
+                }
+                result_map_.push_back(new ResultMap());
+                result_map_[0]->emplace(std::vector<uint>(1, 0), all_values);
+            } else {
+                result_map_.push_back(&first_map);
+            }
         }
 
         for (uint i = 1; i < levels.size(); i++)
@@ -154,6 +170,24 @@ VariableGroup::VariableGroup(ResultMap& map, Group group) {
         results_[i][0] = all_values[i];
 }
 
+VariableGroup::VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group group) {
+    var_offsets = group.var_offsets;
+    key_offsets = group.key_offsets;
+
+    var_result_offset.push_back(0);
+
+    std::vector<uint>* all_values = map.begin()->second;
+    uint end = range.second > all_values->size() ? all_values->size() : range.second;
+
+    results_ = std::vector<std::vector<uint>>(end - range.first, std::vector<uint>(1));
+    uint idx = 0;
+
+    for (uint i = range.first; i < end; i++) {
+        results_[idx][0] = all_values->at(i);
+        idx++;
+    }
+}
+
 VariableGroup::~VariableGroup() {
     results_.clear();
     result_map_.clear();
@@ -162,7 +196,7 @@ VariableGroup::~VariableGroup() {
 }
 
 void VariableGroup::Up() {
-    candidate_value_[level_] = new std::vector<uint>();
+    candidate_value_[level_] = &empty;
     candidate_idx_[level_] = 0;
 
     --level_;
@@ -192,12 +226,13 @@ void VariableGroup::Next() {
 void VariableGroup::GenCandidateValue() {
     auto it = result_map_[level_]->find(result_map_keys_[level_]);
     if (it != result_map_[level_]->end())
-        candidate_value_[level_] = it->second;
-    else
-        candidate_value_[level_] = new std::vector<uint>();
-
-    if (candidate_value_[level_]->empty())
+        if (it->second->empty())
+            at_end_ = true;
+        else
+            candidate_value_[level_] = it->second;
+    else {
         at_end_ = true;
+    }
 }
 
 bool VariableGroup::UpdateCurrentResult() {

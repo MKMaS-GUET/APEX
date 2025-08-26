@@ -262,6 +262,7 @@ std::span<uint>& PredicateIndex::GetSSet(uint pid) {
             uint* recovdata = new uint[reco_size];
 
             streamvbyte_decode(compressed_buffer, recovdata, reco_size);
+            delete[] compressed_buffer;
 
             for (uint i = 1; i < reco_size; i++)
                 recovdata[i] += recovdata[i - 1];
@@ -299,6 +300,7 @@ std::span<uint>& PredicateIndex::GetOSet(uint pid) {
             uint reco_size = predicate_index_mmap_[(pid - 1) * 4 + 3];
             uint* recovdata = new uint[reco_size];
             streamvbyte_decode(compressed_buffer, recovdata, reco_size);
+            delete[] compressed_buffer;
 
             for (uint i = 1; i < reco_size; i++)
                 recovdata[i] += recovdata[i - 1];
