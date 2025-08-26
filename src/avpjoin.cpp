@@ -50,25 +50,17 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
 
             SPARQLParser parser = SPARQLParser(sparql);
             PreProcessor pre_processor = PreProcessor(index, parser.TriplePatterns(), false);
-
-            uint result_count = 0;
-            double execute_cost = 0;
-            double gen_result_cost = 0;
-            if (!pre_processor.zero_result()) {
-                QueryExecutor executor = QueryExecutor(pre_processor, index, parser.Limit());
-                executor.Query();
-                result_count = executor.PrintResult(parser);
-                execute_cost = executor.execute_cost();
-                gen_result_cost = executor.gen_result_cost();
-            }
+            QueryExecutor executor = QueryExecutor(pre_processor, index, parser.Limit());
+            executor.Query();
+            uint result_count = executor.PrintResult(parser);
 
             std::chrono::duration<double, std::milli> query_time =
                 std::chrono::high_resolution_clock::now() - query_start;
 
             std::cout << result_count << " result(s)." << std::endl;
             std::cout << "preprocess takes " << pre_processor.process_cost() << " ms." << std::endl;
-            std::cout << "execute takes " << execute_cost << " ms." << std::endl;
-            std::cout << "gen result takes " << gen_result_cost << " ms." << std::endl;
+            std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
+            std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             std::cout << "query takes " << query_time.count() << " ms." << std::endl;
 
             total_time += query_time.count();

@@ -6,6 +6,11 @@
 
 QueryExecutor::QueryExecutor(PreProcessor& pre_processor, std::shared_ptr<IndexRetriever> index, uint limit)
     : index_(index) {
+    if (pre_processor.zero_result()) {
+        zero_result_ = true;
+        return;
+    }
+
     zero_result_ = false;
     variable_id_ = 0;
     execute_cost_ = std::chrono::duration<double, std::milli>(0);
@@ -525,34 +530,55 @@ void QueryExecutor::Query() {
 }
 
 uint QueryExecutor::PrintResult(SPARQLParser& parser) {
+    if (zero_result_)
+        return 0;
     return result_generator_->PrintResult(*index_, *pre_processor_, parser);
 }
 
 QueryExecutor::~QueryExecutor() {
-    size_t num_threads = std::thread::hardware_concurrency();
-    std::vector<std::thread> threads;
+    size_t num_threads = 16;
 
-    auto worker = [&](size_t start, size_t end) {
-        for (size_t i = start; i < end; ++i) {
-            for (auto& [_, vec_ptr] : result_map_[i]) {
-                delete vec_ptr;
-                vec_ptr = nullptr;
-            }
-            result_map_[i].clear();
+    for (auto& map : result_map_) {
+        if (map.empty())
+            continue;
+
+        size_t total = map.size();
+        size_t chunk_size = (total + num_threads - 1) / num_threads;
+
+        std::vector<std::pair<ResultMap::iterator, ResultMap::iterator>> ranges;
+        ranges.reserve(num_threads);
+
+        auto it = map.begin();
+        for (size_t t = 0; t < num_threads; ++t) {
+            auto start_it = it;
+            size_t remaining = (t * chunk_size >= total) ? 0 : std::min(chunk_size, total - t * chunk_size);
+            for (size_t s = 0; s < remaining && it != map.end(); ++s)
+                ++it;
+            auto end_it = it;
+            if (start_it != end_it)
+                ranges.emplace_back(start_it, end_it);
         }
-    };
 
-    size_t chunk_size = (result_map_.size() + num_threads - 1) / num_threads;
-    for (size_t t = 0; t < num_threads; ++t) {
-        size_t start = t * chunk_size;
-        size_t end = std::min(start + chunk_size, result_map_.size());
-        threads.emplace_back(worker, start, end);
+        auto worker = [](ResultMap* m, ResultMap::iterator b, ResultMap::iterator e) {
+            for (auto itr = b; itr != e; ++itr) {
+                delete itr->second;
+                itr->second = nullptr;
+            }
+        };
+
+        std::vector<std::thread> threads;
+        threads.reserve(ranges.size());
+        for (auto& r : ranges) {
+            threads.emplace_back(worker, &map, r.first, r.second);
+        }
+
+        for (auto& thread : threads) {
+            if (thread.joinable())
+                thread.join();
+        }
+        map.clear();
     }
 
-    for (auto& thread : threads) {
-        if (thread.joinable())
-            thread.join();
-    }
     result_relation_.clear();
 
     result_generator_->~ResultGenerator();

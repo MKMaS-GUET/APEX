@@ -54,6 +54,8 @@ class QueryExecutor {
     std::vector<VariableGroup*> GetResultRelationAndVariableGroup(std::vector<Variable*>& vars);
 
    public:
+    QueryExecutor() = default;
+
     QueryExecutor(PreProcessor& pre_preocessor, std::shared_ptr<IndexRetriever> index, uint limit);
 
     ~QueryExecutor();
