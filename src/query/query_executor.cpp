@@ -536,6 +536,8 @@ uint QueryExecutor::PrintResult(SPARQLParser& parser) {
 }
 
 QueryExecutor::~QueryExecutor() {
+    if (zero_result_)
+        return;
     size_t num_threads = 16;
 
     for (auto& map : result_map_) {
@@ -593,6 +595,8 @@ double QueryExecutor::execute_cost() {
 }
 
 double QueryExecutor::gen_result_cost() {
+    if (zero_result_)
+        return 0;
     return result_generator_->gen_cost();
 }
 
