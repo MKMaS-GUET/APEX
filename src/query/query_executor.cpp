@@ -17,7 +17,7 @@ QueryExecutor::QueryExecutor(PreProcessor& pre_processor, std::shared_ptr<IndexR
 
     result_limit_ = limit;
     if (limit >= 100000)
-        batch_size_ = limit / 20;
+        batch_size_ = limit / 10;
     else
         batch_size_ = limit / 2;
     first_variable_range_ = {0, batch_size_};
@@ -25,8 +25,11 @@ QueryExecutor::QueryExecutor(PreProcessor& pre_processor, std::shared_ptr<IndexR
     processed_flag_ = false;
 
     pre_processor_ = &pre_processor;
+    result_generator_ = nullptr;
 
     remaining_variables_ = pre_processor_->variables();
+
+    result_map_ = std::vector<ResultMap>(pre_processor_->VariableCount());
 
     result_relation_ = std::vector<std::vector<std::pair<uint, uint>>>();
     for (uint i = 0; i < remaining_variables_.size(); i++)
@@ -443,6 +446,8 @@ void QueryExecutor::ProcessNextVariable(std::string variable) {
 
     std::vector<Variable*> next_vars;
     if (!processed_flag_) {
+        variable_order_.push_back(variable);
+
         for (auto& var : *pre_processor_->VarsOf(variable))
             next_vars.push_back(&var);
         plan_.push_back({variable, next_vars});
@@ -467,8 +472,8 @@ void QueryExecutor::ProcessNextVariable(std::string variable) {
     if (!processed_flag_ && result_len == 0)
         zero_result_ = true;
 
-    for (auto& group : variable_groups)
-        group->~VariableGroup();
+    if (variable_order_.size() == pre_processor_->VariableCount())
+        processed_flag_ = true;
 
     if (pre_processor_->plan_generator())
         pre_processor_->UpdateQueryGraph(variable, result_len);
@@ -476,8 +481,31 @@ void QueryExecutor::ProcessNextVariable(std::string variable) {
     variable_id_++;
     remaining_variables_.erase(variable);
 
+    for (auto& group : variable_groups)
+        group->~VariableGroup();
+
     auto end = std::chrono::high_resolution_clock::now();
     execute_cost_ += end - begin;
+}
+
+void QueryExecutor::PostProcess() {
+    if (result_generator_ == nullptr)
+        result_generator_ = new ResultGenerator(result_relation_, result_limit_);
+
+    while (result_generator_->Update(result_map_, first_variable_range_)) {
+        if (first_variable_range_.second > first_variable_result_len_)
+            break;
+
+        first_variable_range_.first = first_variable_range_.second;
+        first_variable_range_.second += batch_size_;
+
+        variable_id_ = 1;
+        for (uint idx = 1; idx < variable_order_.size(); idx++) {
+            ProcessNextVariable(variable_order_[idx]);
+            if (zero_result_)
+                break;
+        }
+    }
 }
 
 void QueryExecutor::Query() {
@@ -486,15 +514,12 @@ void QueryExecutor::Query() {
 
     uint variable_count = pre_processor_->VariableCount();
 
-    result_map_ = std::vector<ResultMap>(variable_count);
-
     std::string next_variable = NextVarieble();
     while (plan_.size() != variable_count) {
-        // auto begin = std::chrono::high_resolution_clock::now();
+        auto begin = std::chrono::high_resolution_clock::now();
         // std::cout << "-------------------------------" << std::endl;
         // std::cout << "Next variable: " << variable_id_ << " " << next_variable << std::endl;
 
-        variable_order_.push_back(next_variable);
         ProcessNextVariable(next_variable);
         if (zero_result_)
             break;
@@ -505,7 +530,6 @@ void QueryExecutor::Query() {
         next_variable = NextVarieble();
     }
     result_generator_ = new ResultGenerator(result_relation_, result_limit_);
-    processed_flag_ = true;
 
     while (result_generator_->Update(result_map_, first_variable_range_)) {
         if (first_variable_range_.second > first_variable_result_len_)
@@ -582,8 +606,8 @@ QueryExecutor::~QueryExecutor() {
     }
 
     result_relation_.clear();
-
-    result_generator_->~ResultGenerator();
+    if (result_generator_)
+        result_generator_->~ResultGenerator();
 }
 
 bool QueryExecutor::zero_result() {
@@ -609,9 +633,5 @@ std::vector<std::vector<std::pair<uint, uint>>>& QueryExecutor::result_relation(
 }
 
 bool QueryExecutor::query_end() {
-    if (zero_result_)
-        return true;
-    if (plan_.size() == pre_processor_->VariableCount())
-        return true;
-    return false;
+    return zero_result_ || processed_flag_;
 }

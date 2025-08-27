@@ -62,6 +62,8 @@ class QueryExecutor {
 
     void ProcessNextVariable(std::string variable);
 
+    void PostProcess();
+
     void Query();
 
     uint PrintResult(SPARQLParser& parser);

@@ -1,4 +1,5 @@
 #include "avpjoin/query/query_graph.hpp"
+#include <iostream>
 
 QueryGraph::Edge::Edge(uint id, Position pos, uint dst) : id(id), pos(pos), dst(dst) {}
 
@@ -130,7 +131,7 @@ std::string QueryGraph::ToString() {
     json << "  ],\n";
 
     // 第四部分：estimated size
-    json << "  \"est_size_\": [\n";
+    json << "  \"est_size\": [\n";
     for (size_t i = 0; i < sorted_vertices.size(); ++i) {
         uint vertex_id = sorted_vertices[i].first;
         auto size_it = est_size_.find(vertex_id);

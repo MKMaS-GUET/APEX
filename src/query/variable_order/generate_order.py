@@ -172,7 +172,7 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         query_graph = json.loads(msg)
 
         # 检查是否有可选择的节点
-        # print(query_graph)
+        print(query_graph)
         vertex_status = query_graph["status"]
         # if 1 not in vertex_status:
         #     logger.warning("No selectable nodes (status=1) in this state.")

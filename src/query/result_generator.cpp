@@ -4,6 +4,7 @@ ResultGenerator::ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>
     result_relation_ = result_relation;
     limit_ = limit;
     gen_cost_ = std::chrono::duration<double, std::milli>(0);
+    result_map_ = nullptr;
 }
 
 bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint, uint> first_variable_range) {
@@ -62,7 +63,8 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
 }
 
 ResultGenerator::~ResultGenerator() {
-    result_map_->clear();
+    if (result_map_)
+        result_map_->clear();
     results_.clear();
 }
 

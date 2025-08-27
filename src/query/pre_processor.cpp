@@ -70,7 +70,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
             variables_.insert(o.value);
             str2var_[o.value].emplace_back(o.value, o.position, set);
         }
-        if (set == nullptr) {
+        if (set == nullptr || set->size() == 0) {
             zero_result_ = true;
             return;
         }
