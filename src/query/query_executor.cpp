@@ -516,7 +516,7 @@ void QueryExecutor::Query() {
 
     std::string next_variable = NextVarieble();
     while (plan_.size() != variable_count) {
-        auto begin = std::chrono::high_resolution_clock::now();
+        // auto begin = std::chrono::high_resolution_clock::now();
         // std::cout << "-------------------------------" << std::endl;
         // std::cout << "Next variable: " << variable_id_ << " " << next_variable << std::endl;
 

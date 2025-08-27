@@ -109,10 +109,10 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
             var_result_offset.push_back(var_id_to_level[ancestor[0]]);
 
         uint size = result_map_[0]->begin()->second->size();
-        for (auto& result : result_map)
-            size *= result.size();
+        for (uint i = 1; i < result_map.size(); i++)
+            size += result_map[i].size();
         results_ = std::vector<std::vector<uint>>();
-        results_.reserve(size);
+        results_.reserve((size > 100000) ? 100000 : size);
 
         current_result_ = std::vector<uint>(levels.size(), 0);
         candidate_value_ = std::vector<std::vector<uint>*>();

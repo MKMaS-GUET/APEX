@@ -23,17 +23,20 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
     if (first_variable_range.second > first_map_size)
         first_variable_range_.second = first_map_size;
 
-    uint size = first_variable_range_.second - first_variable_range_.first;
-    for (uint i = 1; i < result_map.size(); i++)
-        size *= result_map[i].size();
-    if (size == 0)
-        return true;
+    uint est_size = first_variable_range_.second - first_variable_range_.first;
+    for (uint i = 1; i < result_map.size(); i++) {
+        est_size += result_map[i].size();
+        if (result_map[i].size() == 0)
+            return true;
+    }
+    est_size = (results_.size() + est_size > limit_) ? limit_ : est_size;
+    if (results_.capacity() < est_size)
+        results_.reserve(est_size);
 
     result_map_keys_ = std::vector<std::vector<uint>>(result_map_->size());
     for (size_t i = 0; i < result_map_->size(); i++)
         result_map_keys_[i].resize(result_map_->at(i).begin()->first.size(), 0);
 
-    results_.reserve(results_.size() + size);
     current_result_ = std::vector<uint>(result_map_->size(), 0);
     candidate_value_ = std::vector<std::vector<uint>*>();
     for (uint i = 0; i < result_map_->size(); i++)
