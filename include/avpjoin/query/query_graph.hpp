@@ -2,6 +2,7 @@
 #define QUERY_GRAPH_HPP
 
 #include <parallel_hashmap/phmap.h>
+
 #include "avpjoin/parser/sparql_parser.hpp"
 
 using Position = SPARQLParser::Term::Position;

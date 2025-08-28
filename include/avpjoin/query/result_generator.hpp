@@ -46,9 +46,7 @@ class ResultGenerator {
 
     double gen_cost();
 
-    uint PrintResult(IndexRetriever& index, PreProcessor& pre_processor, SPARQLParser& parser);
-
-    std::shared_ptr<std::vector<std::vector<uint>>> results();
+    std::vector<std::vector<uint>>* results();
 };
 
 #endif

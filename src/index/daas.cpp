@@ -1,9 +1,8 @@
-#include "avpjoin/index/daas.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 
+#include "avpjoin/index/daas.hpp"
 #include "avpjoin/utils/bit_operations.hpp"
 
 DAAs::Structure::Structure(std::vector<std::vector<uint>>& arrays) {

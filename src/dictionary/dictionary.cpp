@@ -1,5 +1,4 @@
 #include "avpjoin/dictionary/dictionary.hpp"
-
 #include "avpjoin/utils/vbyte.hpp"
 
 bool Dictionary::LoadPredicate(std::vector<std::string>& id2predicate, hash_map<std::string, uint>& predicate2id) {

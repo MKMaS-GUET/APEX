@@ -136,64 +136,30 @@ double ResultGenerator::gen_cost() {
     return gen_cost_.count();
 }
 
-uint ResultGenerator::PrintResult(IndexRetriever& index, PreProcessor& pre_processor, SPARQLParser& parser) {
-    auto begin = std::chrono::high_resolution_clock::now();
-
-    auto var_print_order = parser.ProjectVariables();
-    auto var_priorty_positon = pre_processor.MappingVariable(var_print_order);
-    uint variable_count = pre_processor.VariableCount();
-    auto modifier = parser.project_modifier();
-
-    // project_variables 是要输出的变量顺序
-    // 而 result 的变量顺序是计划生成中的变量排序
-    // 所以要获取每一个要输出的变量在 result 中的位置
-    for (uint i = 0; i < var_print_order.size(); i++)
-        std::cout << var_print_order[i] << " ";
-    std::cout << std::endl;
-
-    auto last = results_.end();
-
-    uint cnt = 0;
-    if (modifier.modifier_type == SPARQLParser::ProjectModifier::Distinct) {
-        if (variable_count != var_priorty_positon.size()) {
-            std::vector<uint> not_projection_variable_index;
-            for (uint i = 0; i < variable_count; i++)
-                not_projection_variable_index.push_back(i);
-
-            std::set<uint> indexes_to_remove;
-            for (const auto& [prior, pos] : var_priorty_positon)
-                indexes_to_remove.insert(prior);
-
-            not_projection_variable_index.erase(
-                std::remove_if(not_projection_variable_index.begin(), not_projection_variable_index.end(),
-                               [&indexes_to_remove](uint value) { return indexes_to_remove.count(value) > 0; }),
-                not_projection_variable_index.end());
-
-            for (uint result_id = 0; result_id < results_.size(); result_id++) {
-                for (const auto& idx : not_projection_variable_index)
-                    results_[result_id][idx] = 0;
-            }
-            std::sort(results_.begin(), results_.end());
-        }
-
-        last = std::unique(results_.begin(), results_.end(),
-                           // 判断两个列表 a 和 b 是否相同，
-                           [&](const std::vector<uint>& a, const std::vector<uint>& b) {
-                               // std::all_of 可以用来判断数组中的值是否都满足一个条件
-                               return std::all_of(var_priorty_positon.begin(), var_priorty_positon.end(),
-                                                  // 判断依据是，列表中的每一个元素都相同
-                                                  [&](std::pair<uint, Position> pri_pos) {
-                                                      return a[pri_pos.first] == b[pri_pos.first];
-                                                  });
-                           });
-    }
-    for (auto it = results_.begin(); it != last; ++it) {
-        // const auto& item = *it;
-        // for (const auto& [prior, pos] : var_priorty_positon)
-        //     std::cout << index.ID2String(item[prior], pos) << " ";
-        // std::cout << std::endl;
-        cnt++;
-    }
-    gen_cost_ += std::chrono::high_resolution_clock::now() - begin;
-    return cnt;
+std::vector<std::vector<uint>>* ResultGenerator::results() {
+    return &results_;
 }
+
+// uint ResultGenerator::PrintResult(IndexRetriever& index, PreProcessor& pre_processor, SPARQLParser& parser) {
+//     auto begin = std::chrono::high_resolution_clock::now();
+
+//     auto var_print_order = parser.ProjectVariables();
+//     auto var_priorty_positon = pre_processor.MappingVariable(var_print_order);
+//     uint variable_count = pre_processor.VariableCount();
+
+//     // project_variables 是要输出的变量顺序
+//     // 而 result 的变量顺序是计划生成中的变量排序
+//     // 所以要获取每一个要输出的变量在 result 中的位置
+//     for (uint i = 0; i < var_print_order.size(); i++)
+//         std::cout << var_print_order[i] << " ";
+//     std::cout << std::endl;
+
+//     for (auto it = results_.begin(); it != results_.end(); ++it) {
+//         // const auto& item = *it;
+//         // for (const auto& [prior, pos] : var_priorty_positon)
+//         //     std::cout << index.ID2String(item[prior], pos) << " ";
+//         // std::cout << std::endl;
+//     }
+//     gen_cost_ += std::chrono::high_resolution_clock::now() - begin;
+//     return results_.size();
+// }

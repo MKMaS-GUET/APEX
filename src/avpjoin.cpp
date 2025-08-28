@@ -3,6 +3,7 @@
 #include "avpjoin/index/index_builder.hpp"
 #include "avpjoin/index/index_retriever.hpp"
 #include "avpjoin/query/query_executor.hpp"
+#include "avpjoin/query/sub_query_executor.hpp"
 #include "avpjoin/utils/udp_service.hpp"
 
 namespace avpjoin {
@@ -46,7 +47,8 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
 
             auto query_start = std::chrono::high_resolution_clock::now();
 
-            QueryExecutor executor = QueryExecutor(index, sparql, false);
+            SPARQLParser parser = SPARQLParser(sparql);
+            QueryExecutor executor = QueryExecutor(index, parser);
             executor.Query();
             uint result_count = executor.PrintResult();
 
@@ -94,8 +96,9 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
 
             auto query_start = std::chrono::high_resolution_clock::now();
 
-            QueryExecutor base_executor = QueryExecutor(index, sparql, false);
-            QueryExecutor leaner_executor = QueryExecutor(index, sparql, true);
+            SPARQLParser parser = SPARQLParser(sparql);
+            SubQueryExecutor base_executor = SubQueryExecutor(index, parser.TriplePatterns(), parser.Limit(), false);
+            SubQueryExecutor leaner_executor = SubQueryExecutor(index, parser.TriplePatterns(), parser.Limit(), true);
             if (leaner_executor.zero_result())
                 continue;
 
@@ -180,7 +183,8 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
 
             auto query_start = std::chrono::high_resolution_clock::now();
 
-            QueryExecutor executor = QueryExecutor(index, sparql, true);
+            SPARQLParser parser = SPARQLParser(sparql);
+            SubQueryExecutor executor = SubQueryExecutor(index, parser.TriplePatterns(), parser.Limit(), true);
             if (executor.zero_result())
                 continue;
 
@@ -213,7 +217,7 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
             service.sendMessage("end");
 
             executor.PostProcess();
-            uint result_count = executor.PrintResult();
+            uint result_count = executor.results()->size();
 
             auto query_end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> query_time = query_end - query_start;

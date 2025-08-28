@@ -2,7 +2,6 @@
 #define SPARQL_PARSER_HPP
 
 #include <stdint.h>
-
 #include <exception>
 #include <set>
 #include <sstream>

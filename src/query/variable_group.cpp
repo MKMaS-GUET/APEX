@@ -1,7 +1,7 @@
-#include "avpjoin/query/variable_group.hpp"
-
 #include <execution>
 #include <iostream>
+
+#include "avpjoin/query/variable_group.hpp"
 
 VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
                              std::pair<uint, uint> range,

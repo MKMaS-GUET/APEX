@@ -1,5 +1,4 @@
 #include "avpjoin/index/index_builder.hpp"
-
 #include "avpjoin/dictionary/dictionary_builder.hpp"
 #include "avpjoin/index/characteristic_set.hpp"
 #include "avpjoin/index/cs_daa_map.hpp"

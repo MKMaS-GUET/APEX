@@ -1,7 +1,6 @@
-#include "avpjoin/index/characteristic_set.hpp"
-
 #include <iostream>
 
+#include "avpjoin/index/characteristic_set.hpp"
 #include "avpjoin/utils/vbyte.hpp"
 
 CharacteristicSet::Trie::Trie() {

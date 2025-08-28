@@ -1,5 +1,4 @@
 #include "avpjoin/index/index_retriever.hpp"
-
 #include "avpjoin/index/predicate_index.hpp"
 #include "avpjoin/utils/join_list.hpp"
 #include "avpjoin/utils/vbyte.hpp"

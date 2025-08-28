@@ -1,10 +1,9 @@
-#include "avpjoin/index/cs_daa_map.hpp"
-
 #include <algorithm>
 #include <bit>
 #include <cmath>
 #include <iostream>
 
+#include "avpjoin/index/cs_daa_map.hpp"
 #include "avpjoin/utils/bit_operations.hpp"
 
 CsDaaMap::CsDaaMap(std::string file_path) : file_path_(file_path) {

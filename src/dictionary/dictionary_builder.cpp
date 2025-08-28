@@ -1,5 +1,4 @@
 #include "avpjoin/dictionary/dictionary_builder.hpp"
-
 #include "avpjoin/utils/vbyte.hpp"
 
 DictionaryBuilder::DictionaryBuilder(std::string& dict_path, std::string& file_path)

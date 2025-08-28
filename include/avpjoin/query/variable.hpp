@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 #include <vector>
+
 #include "avpjoin/index/index_retriever.hpp"
 
 using Term = SPARQLParser::Term;

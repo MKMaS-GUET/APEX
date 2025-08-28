@@ -1,8 +1,8 @@
-#include "avpjoin/parser/sparql_parser.hpp"
-
 #include <codecvt>
 #include <iomanip>
 #include <iostream>
+
+#include "avpjoin/parser/sparql_parser.hpp"
 
 SPARQLParser::ParserException::ParserException(std::string message) : message(std::move(message)) {}
 
