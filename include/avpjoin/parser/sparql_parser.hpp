@@ -117,6 +117,8 @@ class SPARQLParser {
     Term MakeFunctionLiteral(std::string literal);
 
    public:
+    SPARQLParser() = default;
+
     explicit SPARQLParser(const SPARQLLexer& sparql_lexer);
 
     explicit SPARQLParser(std::string input_string);

@@ -26,10 +26,6 @@ class QueryGraph {
 
     phmap::flat_hash_map<uint, std::vector<Edge>> adjacency_list_;
 
-    uint pre_est_size_ = __UINT32_MAX__;
-
-    int vertex_reward_;
-
    public:
     QueryGraph() = default;
 
@@ -40,8 +36,6 @@ class QueryGraph {
     void UpdateQueryGraph(std::string variable, uint result_map_len);
 
     std::string ToString();
-
-    int reward();
 };
 
 #endif

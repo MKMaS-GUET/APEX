@@ -42,6 +42,7 @@ class GraphActorCritic(nn.Module):
         est_size = torch.tensor(
             query_graph["est_size"], dtype=torch.float32, device=device
         )
+        print(est_size)
         # 归一化est_size
         if est_size.std() > 1e-5:
             est_size = (est_size - est_size.mean()) / est_size.std()
@@ -88,8 +89,8 @@ class GraphActorCritic(nn.Module):
             [
                 status,
                 est_size,
-                in_degree,
-                out_degree,
+                # in_degree,
+                # out_degree,
                 total_degree,  # 添加总度数特征
                 neighbor_stats[:, 0],
                 neighbor_stats[:, 1],
@@ -173,12 +174,6 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
 
         # 检查是否有可选择的节点
         print(query_graph)
-        vertex_status = query_graph["status"]
-        # if 1 not in vertex_status:
-        #     logger.warning("No selectable nodes (status=1) in this state.")
-        #     # 发送默认选择
-        #     service.send_message(query_graph["vertices"][0])
-        #     continue
 
         # 使用图神经网络模型
         model.train()  # 确保模型处于训练模式
@@ -191,17 +186,6 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         action_idx = action.item()
 
         selected_vertex = vertices[action_idx]
-        # if action_idx < len(vertices) and vertex_status[action_idx] == 1:
-        #     selected_vertex = vertices[action_idx]
-        # else:
-        #     candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
-        #     if len(candidate_indices) == 0:
-        #         candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
-        #     action_idx = np.random.choice(candidate_indices)
-        #     selected_vertex = vertices[action_idx]
-        #     logger.warning(
-        #         f"Selected invalid node, falling back to random selection: {selected_vertex}"
-        #     )
 
         # 发送选择的动作
         service.send_message(selected_vertex)
@@ -234,16 +218,18 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         logger.warning("No data collected in this episode.")
         return 0
 
-    # 计算奖励的最大值和最小值
-    reward_max = max(rewards)
-    reward_min = min(rewards)
+
     # 对奖励进行归一化
-    normalized_rewards = [
-        (r - reward_min) / (reward_max - reward_min + 1e-8) for r in rewards
-    ]
+    mean_reward = np.mean(rewards)
+    std_reward = np.std(rewards)
+    if std_reward > 1e-8:  # 避免除零
+        rewards = [(r - mean_reward) / std_reward for r in rewards]
+    else:
+        rewards = [r - mean_reward for r in rewards]
+        
     returns = []
     R = 0
-    for r in reversed(normalized_rewards):
+    for r in reversed(rewards):
         R = r + 0.95 * R  # 折扣因子
         returns.insert(0, R)
 
@@ -303,7 +289,7 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         optimizer.step()
 
     # 计算总奖励
-    total_reward = sum(normalized_rewards)
+    total_reward = sum(rewards)
     avg_policy_loss = np.mean(policy_losses)
     avg_value_loss = np.mean(value_losses)
 
@@ -364,9 +350,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
 # 初始化模型和优化器
-node_feature_dim = 11  # 根据build_node_features输出的特征维度
+node_feature_dim = 9  # 根据build_node_features输出的特征维度
 model = GraphActorCritic(node_feature_dim).to(device)
-optimizer = adam.Adam(model.parameters(), lr=1e-3)
+optimizer = adam.Adam(model.parameters(), lr=5e-4)
 
 # UDP服务
 service = udp_service.UDPService(2078, 2077)
@@ -379,14 +365,14 @@ while True:
     msg = service.receive_message()
     if msg == "start":
         while True:
-            query_graph = json.loads(service.receive_message())
+            msg = service.receive_message()
+            if msg == "end":
+                break
+            query_graph = json.loads(msg)
             print(query_graph)
             next_variable = select_vertex_gnn(query_graph, model)
             service.send_message(next_variable)
             msg = service.receive_message()
-            if msg == "end":
-                break
-            print("reward: ", msg)
 
 
 # def select_vertex(query_graph):

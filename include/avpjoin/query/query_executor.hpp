@@ -22,9 +22,9 @@ class QueryExecutor {
 
     uint variable_id_;
 
-    PreProcessor* pre_processor_;
-
     std::shared_ptr<IndexRetriever> index_;
+    SPARQLParser parser_;
+    PreProcessor pre_processor_;
 
     std::vector<std::pair<std::string, std::vector<Variable*>>> plan_;
     std::vector<std::string> variable_order_;
@@ -43,8 +43,6 @@ class QueryExecutor {
 
     std::chrono::duration<double, std::milli> execute_cost_;
 
-    std::string NextVarieble();
-
     std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
     uint ParallelJoin(std::vector<Variable*> vars, std::vector<VariableGroup*> variable_groups, ResultMap& result);
@@ -56,33 +54,35 @@ class QueryExecutor {
    public:
     QueryExecutor() = default;
 
-    QueryExecutor(PreProcessor& pre_preocessor, std::shared_ptr<IndexRetriever> index, uint limit);
+    QueryExecutor(std::shared_ptr<IndexRetriever> index, std::string query, bool use_order_generator);
 
     ~QueryExecutor();
 
-    void ProcessNextVariable(std::string variable);
+    std::string NextVarieble();
+
+    uint ProcessNextVariable(std::string variable);
 
     void PostProcess();
 
     void Query();
 
-    uint PrintResult(SPARQLParser& parser);
+    uint PrintResult();
 
     bool zero_result();
+
+    double preprocess_cost();
 
     double execute_cost();
 
     double gen_result_cost();
+
+    std::string query_graph();
 
     std::vector<ResultMap>& result_map();
 
     std::vector<std::vector<std::pair<uint, uint>>>& result_relation();
 
     bool query_end();
-
-    std::string query_graph();
-
-    int reward();
 };
 
 #endif  // QUERY_EXECUTOR_HPP

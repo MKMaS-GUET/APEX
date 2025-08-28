@@ -2,9 +2,7 @@
 
 #include "avpjoin/index/index_builder.hpp"
 #include "avpjoin/index/index_retriever.hpp"
-#include "avpjoin/parser/sparql_parser.hpp"
 #include "avpjoin/query/query_executor.hpp"
-#include "avpjoin/query/result_generator.hpp"
 #include "avpjoin/utils/udp_service.hpp"
 
 namespace avpjoin {
@@ -48,17 +46,15 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
 
             auto query_start = std::chrono::high_resolution_clock::now();
 
-            SPARQLParser parser = SPARQLParser(sparql);
-            PreProcessor pre_processor = PreProcessor(index, parser.TriplePatterns(), false);
-            QueryExecutor executor = QueryExecutor(pre_processor, index, parser.Limit());
+            QueryExecutor executor = QueryExecutor(index, sparql, false);
             executor.Query();
-            uint result_count = executor.PrintResult(parser);
+            uint result_count = executor.PrintResult();
 
             std::chrono::duration<double, std::milli> query_time =
                 std::chrono::high_resolution_clock::now() - query_start;
 
             std::cout << result_count << " result(s)." << std::endl;
-            std::cout << "preprocess takes " << pre_processor.process_cost() << " ms." << std::endl;
+            std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
             std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             std::cout << "query takes " << query_time.count() << " ms." << std::endl;
@@ -98,33 +94,40 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
 
             auto query_start = std::chrono::high_resolution_clock::now();
 
-            SPARQLParser parser = SPARQLParser(sparql);
-            PreProcessor pre_processor = PreProcessor(index, parser.TriplePatterns(), true);
-            QueryExecutor executor = QueryExecutor(pre_processor, index, parser.Limit());
-
-            if (pre_processor.zero_result())
+            QueryExecutor base_executor = QueryExecutor(index, sparql, false);
+            QueryExecutor leaner_executor = QueryExecutor(index, sparql, true);
+            if (leaner_executor.zero_result())
                 continue;
 
-            std::string query_graph = pre_processor.query_graph();
+            std::string query_graph = leaner_executor.query_graph();
             service.sendMessage("start");
             service.sendMessage(query_graph);
+            // std::cout << query_graph << std::endl;
 
             double plan_time = 0;
             std::chrono::duration<double, std::milli> time;
-            while (true) {
+            while (!base_executor.query_end() && !leaner_executor.query_end()) {
                 auto start = std::chrono::high_resolution_clock::now();
+                std::string base_next_variable = base_executor.NextVarieble();
+                int base_result_len = base_executor.ProcessNextVariable(base_next_variable);
+                time = std::chrono::high_resolution_clock::now() - start;
+                std::cout << "Base Processing " << base_next_variable << " takes: " << time.count() << " ms"
+                          << std::endl;
+
+                start = std::chrono::high_resolution_clock::now();
                 std::string next_variable = service.receiveMessage();
                 time = std::chrono::high_resolution_clock::now() - start;
                 plan_time += time.count();
 
                 start = std::chrono::high_resolution_clock::now();
-                executor.ProcessNextVariable(next_variable);
-                time = std::chrono::high_resolution_clock::now() - start;
-                std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+                int leaner_result_len = leaner_executor.ProcessNextVariable(next_variable);
 
-                if (!executor.query_end()) {
-                    service.sendMessage(std::to_string(pre_processor.reward()));
-                    query_graph = pre_processor.query_graph();
+                time = std::chrono::high_resolution_clock::now() - start;
+                std::cout << "Leaner Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+
+                if (!leaner_executor.query_end()) {
+                    service.sendMessage(std::to_string(base_result_len - leaner_result_len));
+                    query_graph = leaner_executor.query_graph();
                     service.sendMessage(query_graph);
                 } else {
                     break;
@@ -136,14 +139,14 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
             std::chrono::duration<double, std::milli> query_time = query_end - query_start;
 
             std::cout << "gen plan cost " << plan_time << " ms." << std::endl;
-            std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
-            std::cout << "query takes " << query_time.count() << " ms." << std::endl;
+            std::cout << "base execute takes " << base_executor.execute_cost() << " ms." << std::endl;
+            std::cout << "leaner execute takes " << leaner_executor.execute_cost() << " ms." << std::endl;
 
             total_time += query_time.count() - plan_time;
         }
         service.sendMessage("train end");
 
-        std::cout << "avg query takes: " << total_time / sparqls.size() << std::endl;
+        std::cout << "avg query time: " << total_time / sparqls.size() << std::endl;
 
         exit(0);
     }
@@ -177,13 +180,11 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
 
             auto query_start = std::chrono::high_resolution_clock::now();
 
-            SPARQLParser parser = SPARQLParser(sparql);
-            PreProcessor pre_processor = PreProcessor(index, parser.TriplePatterns(), true);
-            QueryExecutor executor = QueryExecutor(pre_processor, index, parser.Limit());
-            if (pre_processor.zero_result())
+            QueryExecutor executor = QueryExecutor(index, sparql, true);
+            if (executor.zero_result())
                 continue;
 
-            std::string query_graph = pre_processor.query_graph();
+            std::string query_graph = executor.query_graph();
 
             service.sendMessage("start");
             service.sendMessage(query_graph);
@@ -203,17 +204,16 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
                 std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
 
                 if (!executor.query_end()) {
-                    service.sendMessage(std::to_string(pre_processor.reward()));
-                    query_graph = pre_processor.query_graph();
+                    query_graph = executor.query_graph();
                     service.sendMessage(query_graph);
                 } else {
                     break;
                 }
             }
             service.sendMessage("end");
-            
+
             executor.PostProcess();
-            uint result_count = executor.PrintResult(parser);
+            uint result_count = executor.PrintResult();
 
             auto query_end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> query_time = query_end - query_start;

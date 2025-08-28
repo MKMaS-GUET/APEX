@@ -194,10 +194,6 @@ bool PreProcessor::plan_generator() {
     return plan_generator_;
 }
 
-uint PreProcessor::reward() {
-    return query_graph_.reward();
-}
-
 double PreProcessor::process_cost() {
     return process_cost_.count();
 }

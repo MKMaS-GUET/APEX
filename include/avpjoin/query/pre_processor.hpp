@@ -21,9 +21,11 @@ class PreProcessor {
     std::chrono::duration<double, std::milli> process_cost_;
 
    public:
+    PreProcessor() = default;
+
     PreProcessor(std::shared_ptr<IndexRetriever> index,
                  const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
-                 bool plan_generator);
+                 bool use_order_generator);
 
     std::vector<std::pair<uint, Position>> MappingVariable(const std::vector<std::string>& variables);
 

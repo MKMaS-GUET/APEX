@@ -189,7 +189,7 @@ uint ResultGenerator::PrintResult(IndexRetriever& index, PreProcessor& pre_proce
     }
     for (auto it = results_.begin(); it != last; ++it) {
         // const auto& item = *it;
-        // for (const auto& [prior, pos] : prior_pos)
+        // for (const auto& [prior, pos] : var_priorty_positon)
         //     std::cout << index.ID2String(item[prior], pos) << " ";
         // std::cout << std::endl;
         cnt++;

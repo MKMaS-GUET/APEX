@@ -7,8 +7,6 @@ void QueryGraph::AddVertex(std::pair<std::string, uint> vertex) {
     vertexes_.try_emplace(vertex.first, vertexes_.size());
     uint vartex_id = vertexes_[vertex.first];
     vertex_status_.try_emplace(vartex_id, 1);
-    if (vertex.second < pre_est_size_)
-        pre_est_size_ = vertex.second;
     if (est_size_[vartex_id] == 0 || vertex.second < est_size_[vartex_id])
         est_size_[vartex_id] = vertex.second;
 }
@@ -25,9 +23,6 @@ void QueryGraph::AddEdge(std::pair<std::string, uint> src,
 
 void QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
     uint vertex_id = vertexes_[variable];
-
-    vertex_reward_ = pre_est_size_ - cur_est_size;
-    pre_est_size_ = cur_est_size;
 
     for (const auto& [v_id, nbrs] : adjacency_list_) {
         if (v_id == vertex_id) {
@@ -145,8 +140,4 @@ std::string QueryGraph::ToString() {
 
     json << "}";
     return json.str();
-}
-
-int QueryGraph::reward() {
-    return this->vertex_reward_;
 }

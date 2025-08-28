@@ -4,9 +4,10 @@
 #include "avpjoin/query/query_executor.hpp"
 #include "avpjoin/utils/disjoint_set_union.hpp"
 
-QueryExecutor::QueryExecutor(PreProcessor& pre_processor, std::shared_ptr<IndexRetriever> index, uint limit)
-    : index_(index) {
-    if (pre_processor.zero_result()) {
+QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, std::string query, bool use_order_generator)
+    : index_(index), parser_(query) {
+    pre_processor_ = PreProcessor(index, parser_.TriplePatterns(), use_order_generator);
+    if (pre_processor_.zero_result()) {
         zero_result_ = true;
         return;
     }
@@ -15,21 +16,20 @@ QueryExecutor::QueryExecutor(PreProcessor& pre_processor, std::shared_ptr<IndexR
     variable_id_ = 0;
     execute_cost_ = std::chrono::duration<double, std::milli>(0);
 
-    result_limit_ = limit;
-    if (limit >= 100000)
-        batch_size_ = limit / 10;
+    result_limit_ = parser_.Limit();
+    if (result_limit_ >= 100000)
+        batch_size_ = result_limit_ / 10;
     else
-        batch_size_ = limit / 2;
+        batch_size_ = result_limit_ / 2;
     first_variable_range_ = {0, batch_size_};
     first_variable_result_len_ = 0;
     processed_flag_ = false;
 
-    pre_processor_ = &pre_processor;
     result_generator_ = nullptr;
 
-    remaining_variables_ = pre_processor_->variables();
+    remaining_variables_ = pre_processor_.variables();
 
-    result_map_ = std::vector<ResultMap>(pre_processor_->VariableCount());
+    result_map_ = std::vector<ResultMap>(pre_processor_.VariableCount());
 
     result_relation_ = std::vector<std::vector<std::pair<uint, uint>>>();
     for (uint i = 0; i < remaining_variables_.size(); i++)
@@ -49,7 +49,7 @@ std::string QueryExecutor::NextVarieble() {
 
     uint idx = 0;
     for (auto v : remaining_variables_) {
-        auto vars = pre_processor_->VarsOf(v);
+        auto vars = pre_processor_.VarsOf(v);
 
         uint link = 0;
         uint var_min_size = __UINT32_MAX__;
@@ -441,14 +441,14 @@ std::vector<VariableGroup*> QueryExecutor::GetResultRelationAndVariableGroup(std
     return variable_groups;
 }
 
-void QueryExecutor::ProcessNextVariable(std::string variable) {
+uint QueryExecutor::ProcessNextVariable(std::string variable) {
     auto begin = std::chrono::high_resolution_clock::now();
 
     std::vector<Variable*> next_vars;
     if (!processed_flag_) {
         variable_order_.push_back(variable);
 
-        for (auto& var : *pre_processor_->VarsOf(variable))
+        for (auto& var : *pre_processor_.VarsOf(variable))
             next_vars.push_back(&var);
         plan_.push_back({variable, next_vars});
 
@@ -472,11 +472,11 @@ void QueryExecutor::ProcessNextVariable(std::string variable) {
     if (!processed_flag_ && result_len == 0)
         zero_result_ = true;
 
-    if (variable_order_.size() == pre_processor_->VariableCount())
+    if (variable_order_.size() == pre_processor_.VariableCount())
         processed_flag_ = true;
 
-    if (pre_processor_->plan_generator())
-        pre_processor_->UpdateQueryGraph(variable, result_len);
+    if (pre_processor_.plan_generator())
+        pre_processor_.UpdateQueryGraph(variable, result_len);
 
     variable_id_++;
     remaining_variables_.erase(variable);
@@ -486,6 +486,8 @@ void QueryExecutor::ProcessNextVariable(std::string variable) {
 
     auto end = std::chrono::high_resolution_clock::now();
     execute_cost_ += end - begin;
+
+    return result_len;
 }
 
 void QueryExecutor::PostProcess() {
@@ -512,22 +514,17 @@ void QueryExecutor::Query() {
     if (zero_result_)
         return;
 
-    uint variable_count = pre_processor_->VariableCount();
+    while (!query_end()) {
+        std::string next_variable = NextVarieble();
 
-    std::string next_variable = NextVarieble();
-    while (plan_.size() != variable_count) {
         // auto begin = std::chrono::high_resolution_clock::now();
         // std::cout << "-------------------------------" << std::endl;
         // std::cout << "Next variable: " << variable_id_ << " " << next_variable << std::endl;
 
         ProcessNextVariable(next_variable);
-        if (zero_result_)
-            break;
 
         // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
         // std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
-
-        next_variable = NextVarieble();
     }
     result_generator_ = new ResultGenerator(result_relation_, result_limit_);
 
@@ -553,10 +550,10 @@ void QueryExecutor::Query() {
     }
 }
 
-uint QueryExecutor::PrintResult(SPARQLParser& parser) {
+uint QueryExecutor::PrintResult() {
     if (zero_result_)
         return 0;
-    return result_generator_->PrintResult(*index_, *pre_processor_, parser);
+    return result_generator_->PrintResult(*index_, pre_processor_, parser_);
 }
 
 QueryExecutor::~QueryExecutor() {
@@ -614,6 +611,10 @@ bool QueryExecutor::zero_result() {
     return zero_result_;
 }
 
+double QueryExecutor::preprocess_cost() {
+    return pre_processor_.process_cost();
+}
+
 double QueryExecutor::execute_cost() {
     return execute_cost_.count();
 }
@@ -622,6 +623,10 @@ double QueryExecutor::gen_result_cost() {
     if (zero_result_)
         return 0;
     return result_generator_->gen_cost();
+}
+
+std::string QueryExecutor::query_graph() {
+    return pre_processor_.query_graph();
 }
 
 std::vector<ResultMap>& QueryExecutor::result_map() {
