@@ -217,7 +217,7 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
             service.sendMessage("end");
 
             executor.PostProcess();
-            uint result_count = executor.results()->size();
+            uint result_count = executor.ResultSize();
 
             auto query_end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> query_time = query_end - query_start;

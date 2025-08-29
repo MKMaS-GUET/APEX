@@ -33,6 +33,15 @@ struct Variable {
 
     int var_id;
 
+    phmap::parallel_flat_hash_map<uint,
+                                  std::vector<uint>*,
+                                  phmap::Hash<uint>,
+                                  std::equal_to<uint>,
+                                  std::allocator<std::pair<const uint, std::vector<uint>*>>,
+                                  4,
+                                  std::mutex>
+        cache;
+
     Variable();
 
     Variable(std::string variable, Position position, std::vector<uint>* pre_retrieve);
@@ -42,6 +51,8 @@ struct Variable {
              uint triple_constant_id,
              Position triple_constant_pos,
              std::shared_ptr<IndexRetriever> index);
+
+    ~Variable();
 
     std::vector<uint>* Retrieve(uint key);
 

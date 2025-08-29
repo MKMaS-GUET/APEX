@@ -66,7 +66,9 @@ class SubQueryExecutor {
 
     void Query();
 
-    std::vector<std::vector<uint>>* results();
+    std::pair<ResultGenerator::iterator, ResultGenerator::iterator> ResultsIter();
+
+    uint ResultSize();
 
     bool zero_result();
 

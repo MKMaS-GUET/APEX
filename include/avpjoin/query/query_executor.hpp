@@ -14,12 +14,13 @@ class QueryExecutor {
 
     SPARQLParser parser_;
     std::vector<SubQueryExecutor*> executors_;
-    std::vector<std::vector<std::vector<uint>>*> sub_query_results_;
 
     bool zero_result_;
 
    public:
     QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser);
+
+    ~QueryExecutor();
 
     void Query();
 

@@ -42,28 +42,35 @@ Variable::Variable(std::string variable,
       index_(index) {}
 
 std::vector<uint>* Variable::Retrieve(uint key) {
+    auto it = cache.find(key);
+    if (it != cache.end())
+        return it->second;
+
+    std::vector<uint>* result = nullptr;
     Position key_pos = connection->position;
     if (triple_constant_pos == SPARQLParser::Term::kSubject) {
         // s ?p ?o
         if (key_pos == SPARQLParser::Term::kPredicate)
-            return index_->GetBySP(triple_constant_id, key);
+            result = index_->GetBySP(triple_constant_id, key);
         else if (key_pos == SPARQLParser::Term::kObject)
-            return index_->GetBySO(triple_constant_id, key);
+            result = index_->GetBySO(triple_constant_id, key);
     } else if (triple_constant_pos == SPARQLParser::Term::kPredicate) {
         // ?s p ?o
         if (key_pos == SPARQLParser::Term::kSubject)
-            return index_->GetBySP(key, triple_constant_id);
+            result = index_->GetBySP(key, triple_constant_id);
         else if (key_pos == SPARQLParser::Term::kObject) {
-            return index_->GetByOP(key, triple_constant_id);
+            result = index_->GetByOP(key, triple_constant_id);
         }
     } else if (triple_constant_pos == SPARQLParser::Term::kObject) {
         // ?s ?p o
         if (key_pos == SPARQLParser::Term::kSubject)
-            return index_->GetBySO(key, triple_constant_id);
+            result = index_->GetBySO(key, triple_constant_id);
         else if (key_pos == SPARQLParser::Term::kPredicate)
-            return index_->GetByOP(triple_constant_id, key);
+            result = index_->GetByOP(triple_constant_id, key);
     }
-    return new std::vector<uint>();
+    if (result != nullptr)
+        cache.insert({key, result});
+    return result;
 }
 
 std::span<uint> Variable::PreRetrieve() {
@@ -86,4 +93,12 @@ std::span<uint> Variable::PreRetrieve() {
         }
     }
     return pre_retrieve;
+}
+
+Variable::~Variable() {
+    if (cache.size()) {
+        for (auto& [_, v] : cache)
+            delete v;
+        cache.clear();
+    }
 }

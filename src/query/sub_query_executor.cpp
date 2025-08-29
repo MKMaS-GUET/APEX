@@ -8,8 +8,7 @@ SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
                                    const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
                                    uint limit,
                                    bool use_order_generator)
-    : index_(index) {
-    pre_processor_ = PreProcessor(index, triple_partterns, use_order_generator);
+    : index_(index), pre_processor_(index, triple_partterns, use_order_generator) {
     if (pre_processor_.zero_result()) {
         zero_result_ = true;
         return;
@@ -20,14 +19,10 @@ SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
     execute_cost_ = std::chrono::duration<double, std::milli>(0);
 
     result_limit_ = limit;
-    if (limit > 2) {
-        if (result_limit_ >= 100000)
-            batch_size_ = result_limit_ / 10;
-        else
-            batch_size_ = result_limit_ / 2;
-    } else {
-        batch_size_ = 10;
-    }
+    if (result_limit_ >= 100000)
+        batch_size_ = 10000;
+    else
+        batch_size_ = 1000;
 
     first_variable_range_ = {0, batch_size_};
     first_variable_result_len_ = 0;
@@ -230,6 +225,7 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
                     uint key_offset = key_offsets[v];
                     if (key_offset > 0)
                         key[key_offset - 1] = k;
+
                     if (vars[var_offsets[v]]->is_none)
                         join_list.AddList(vars[var_offsets[v]]->Retrieve(k));
                     else
@@ -241,11 +237,13 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
                 break;
 
             std::vector<uint>* intersection = LeapfrogJoin(join_list);
-            join_list.Clear();
+            // join_list.Clear();
             if (!intersection->empty()) {
                 auto emplace_result = local_result.emplace(key, intersection);
                 if (emplace_result.second)  // 只有在成功插入时才更新
                     local_result_len += intersection->size();
+                else
+                    delete intersection;
             }
 
             int group_idx = group_cnt - 1;
@@ -262,11 +260,14 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
         }
         return local_result_len;
     };
-    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 256), static_cast<uint>(16));
+
+    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(16));
     // std::cout << max_join_cnt << " " << num_threads << std::endl;
     // num_threads = 1;
-    if (num_threads <= 1)
-        return joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
+    if (num_threads <= 1) {
+        uint result_len = joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
+        return result_len;
+    }
 
     // 计算每个线程的范围
     std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
@@ -306,7 +307,6 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
         if (thread.joinable())
             thread.join();
     }
-
     return result_len;
 }
 
@@ -537,6 +537,7 @@ void SubQueryExecutor::Query() {
     result_generator_ = new ResultGenerator(result_relation_, result_limit_);
 
     while (result_generator_->Update(result_map_, first_variable_range_)) {
+        // std::cout << first_variable_range_.second << " " << first_variable_result_len_ << std::endl;
         if (first_variable_range_.second > first_variable_result_len_)
             break;
 
@@ -558,8 +559,12 @@ void SubQueryExecutor::Query() {
     }
 }
 
-std::vector<std::vector<uint>>* SubQueryExecutor::results() {
-    return result_generator_->results();
+std::pair<ResultGenerator::iterator, ResultGenerator::iterator> SubQueryExecutor::ResultsIter() {
+    return {result_generator_->begin(), result_generator_->end()};
+}
+
+uint SubQueryExecutor::ResultSize() {
+    return result_generator_->ResultsSize();
 }
 
 SubQueryExecutor::~SubQueryExecutor() {

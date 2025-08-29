@@ -132,12 +132,15 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
     // 获取每个子查询包含的变量
     sub_query_vars_.reserve(sub_queries_.size());
     for (const auto& sub_query : sub_queries_) {
+        // std::cout << "----------------" << std::endl;
+
         std::set<std::string> vars_set;
 
         for (const auto& triple_pattern : sub_query) {
             const auto& s = triple_pattern.subject;
             const auto& p = triple_pattern.predicate;
             const auto& o = triple_pattern.object;
+            // std::cout << s.value << " " << p.value << " " << o.value << std::endl;
 
             if (s.IsVariable())
                 vars_set.insert(s.value);
@@ -149,6 +152,12 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
 
         sub_query_vars_.emplace_back(vars_set.begin(), vars_set.end());
     }
+    // std::cout << "----------------" << std::endl;
+}
+
+QueryExecutor::~QueryExecutor() {
+    for (auto& executor : executors_)
+        executor->~SubQueryExecutor();
 }
 
 void QueryExecutor::Query() {
@@ -161,9 +170,10 @@ void QueryExecutor::Query() {
             zero_result_ = true;
             return;
         }
-        auto results = executor->results();
-        sub_query_results_.push_back(results);
-        total_limit = (total_limit + results->size() - 1) / results->size();
+        uint count = executor->ResultSize();
+        total_limit = (total_limit + count - 1) / count;
+        if (total_limit < 1)
+            total_limit = 1;
     }
 }
 
@@ -174,13 +184,21 @@ uint QueryExecutor::PrintResult() {
     uint limit = parser_.Limit();
     uint count = 0;
 
-    std::vector<std::vector<std::vector<uint>>::const_iterator> iters;
-    std::vector<std::vector<std::vector<uint>>::const_iterator> ends;
+    std::vector<ResultGenerator::iterator> sub_query_results;
 
-    for (const auto& result : sub_query_results_) {
-        iters.push_back(result->begin());
-        ends.push_back(result->end());
+    std::vector<ResultGenerator::iterator> iters;
+    std::vector<ResultGenerator::iterator> begins;
+    std::vector<ResultGenerator::iterator> ends;
+
+    for (auto& executor : executors_) {
+        auto [begin, end] = executor->ResultsIter();
+        iters.push_back(begin);
+        begins.push_back(begin);
+        ends.push_back(end);
+        // std::cout << executor->ResultSize() << std::endl;
     }
+
+    uint sub_query_cnt = sub_queries_.size();
 
     // 执行笛卡尔积
     while (true) {
@@ -188,9 +206,9 @@ uint QueryExecutor::PrintResult() {
         std::vector<uint> combined_row;
 
         // 收集所有子查询结果的当前行
-        for (size_t i = 0; i < sub_query_results_.size(); i++) {
-            const auto& current_row = *(iters[i]);
-            combined_row.insert(combined_row.end(), current_row.begin(), current_row.end());
+        for (size_t i = 0; i < sub_query_cnt; i++) {
+            std::vector<uint>* current_row = *(iters[i]);
+            combined_row.insert(combined_row.end(), current_row->begin(), current_row->end());
         }
 
         // 输出结果（根据实际情况调整）
@@ -206,7 +224,7 @@ uint QueryExecutor::PrintResult() {
             break;
 
         // 移动到下一个组合
-        int idx = sub_query_results_.size() - 1;
+        int idx = sub_query_cnt - 1;
         bool all_done = false;
 
         while (idx >= 0) {
@@ -219,7 +237,7 @@ uint QueryExecutor::PrintResult() {
                     all_done = true;
                     break;
                 }
-                iters[idx] = sub_query_results_[idx]->begin();
+                iters[idx] = begins[idx];
                 idx--;
             } else {
                 // 当前迭代器还有更多元素，继续处理

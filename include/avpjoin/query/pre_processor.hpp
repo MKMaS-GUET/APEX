@@ -41,8 +41,6 @@ class PreProcessor {
 
     bool plan_generator();
 
-    uint reward();
-
     double process_cost();
 
     bool zero_result();
