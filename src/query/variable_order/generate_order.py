@@ -370,8 +370,11 @@ while True:
             if msg == "end":
                 break
             query_graph = json.loads(msg)
+            print(query_graph)
             next_variable = select_vertex_gnn(query_graph, model)
             service.send_message(next_variable)
+            print(next_variable)
+
 
 
 # def select_vertex(query_graph):
