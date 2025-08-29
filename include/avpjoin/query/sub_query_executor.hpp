@@ -80,6 +80,10 @@ class SubQueryExecutor {
 
     std::string query_graph();
 
+    std::vector<std::string> variable_order();
+
+    std::vector<std::pair<uint, Position>> MappingVariable(const std::vector<std::string>& variables);
+
     std::vector<ResultMap>& result_map();
 
     std::vector<std::vector<std::pair<uint, uint>>>& result_relation();

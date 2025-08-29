@@ -42,7 +42,6 @@ class GraphActorCritic(nn.Module):
         est_size = torch.tensor(
             query_graph["est_size"], dtype=torch.float32, device=device
         )
-        print(est_size)
         # 归一化est_size
         if est_size.std() > 1e-5:
             est_size = (est_size - est_size.mean()) / est_size.std()
@@ -188,6 +187,7 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         selected_vertex = vertices[action_idx]
 
         # 发送选择的动作
+        print(selected_vertex)
         service.send_message(selected_vertex)
 
         # 接收奖励
@@ -218,7 +218,6 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         logger.warning("No data collected in this episode.")
         return 0
 
-
     # 对奖励进行归一化
     mean_reward = np.mean(rewards)
     std_reward = np.std(rewards)
@@ -226,7 +225,7 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         rewards = [(r - mean_reward) / std_reward for r in rewards]
     else:
         rewards = [r - mean_reward for r in rewards]
-        
+
     returns = []
     R = 0
     for r in reversed(rewards):
@@ -360,6 +359,8 @@ service = udp_service.UDPService(2078, 2077)
 while not train_episode(service, model, optimizer):
     pass
 
+print("training ends")
+
 while True:
     print("-------------------------------------")
     msg = service.receive_message()
@@ -369,10 +370,8 @@ while True:
             if msg == "end":
                 break
             query_graph = json.loads(msg)
-            print(query_graph)
             next_variable = select_vertex_gnn(query_graph, model)
             service.send_message(next_variable)
-            msg = service.receive_message()
 
 
 # def select_vertex(query_graph):

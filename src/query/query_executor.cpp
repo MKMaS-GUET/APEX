@@ -1,6 +1,6 @@
 #include <parallel_hashmap/phmap.h>
-
 #include <queue>
+
 #include "avpjoin/query/query_executor.hpp"
 
 QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser)
@@ -36,25 +36,24 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
         }
     }
 
-    phmap::flat_hash_map<std::string, int> var_to_component;
     int component_id = 0;
 
     // 使用BFS找到所有连通分量
     for (const auto& node : adjacency_list_ud) {
-        if (var_to_component.contains(node.first))
+        if (var_to_component_.contains(node.first))
             continue;
 
         std::queue<std::string> q;
         q.push(node.first);
-        var_to_component[node.first] = component_id;
+        var_to_component_[node.first] = component_id;
 
         while (!q.empty()) {
             std::string current = q.front();
             q.pop();
 
             for (const auto& neighbor : adjacency_list_ud[current]) {
-                if (!var_to_component.contains(neighbor)) {
-                    var_to_component[neighbor] = component_id;
+                if (!var_to_component_.contains(neighbor)) {
+                    var_to_component_[neighbor] = component_id;
                     q.push(neighbor);
                 }
             }
@@ -74,12 +73,12 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
         // 找到这个三元组模式中所有变量所属的连通分量
         std::set<int> components;
 
-        if (s.IsVariable() && var_to_component.contains(s.value))
-            components.insert(var_to_component[s.value]);
-        if (p.IsVariable() && var_to_component.contains(p.value))
-            components.insert(var_to_component[p.value]);
-        if (o.IsVariable() && var_to_component.contains(o.value))
-            components.insert(var_to_component[o.value]);
+        if (s.IsVariable() && var_to_component_.contains(s.value))
+            components.insert(var_to_component_[s.value]);
+        if (p.IsVariable() && var_to_component_.contains(p.value))
+            components.insert(var_to_component_[p.value]);
+        if (o.IsVariable() && var_to_component_.contains(o.value))
+            components.insert(var_to_component_[o.value]);
 
         // 如果三元组模式没有变量或变量不在任何连通分量中，创建一个新的组
         if (components.empty()) {
@@ -98,7 +97,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
                     continue;
 
                 // 重新标记所有属于comp的变量
-                for (auto& [var, comp_id] : var_to_component) {
+                for (auto& [var, comp_id] : var_to_component_) {
                     if (comp_id == comp)
                         comp_id = main_component;
                 }
@@ -177,76 +176,151 @@ void QueryExecutor::Query() {
     }
 }
 
+void QueryExecutor::Train(UDPService& service) {
+    uint limit = parser_.Limit();
+
+    for (auto& sub_query : sub_queries_) {
+        std::cout << "-------------------------------------" << std::endl;
+        SubQueryExecutor base_executor = SubQueryExecutor(index_, sub_query, limit, false);
+        SubQueryExecutor leaner_executor = SubQueryExecutor(index_, sub_query, limit, true);
+        if (leaner_executor.zero_result())
+            continue;
+
+        std::string query_graph = leaner_executor.query_graph();
+        service.sendMessage("start");
+        service.sendMessage(query_graph);
+        // std::cout << query_graph << std::endl;
+
+        double plan_time = 0;
+        std::chrono::duration<double, std::milli> time;
+        while (!base_executor.query_end() && !leaner_executor.query_end()) {
+            auto start = std::chrono::high_resolution_clock::now();
+            std::string base_next_variable = base_executor.NextVarieble();
+            int base_result_len = base_executor.ProcessNextVariable(base_next_variable);
+            time = std::chrono::high_resolution_clock::now() - start;
+            std::cout << "Base Processing " << base_next_variable << " takes: " << time.count() << " ms" << std::endl;
+
+            start = std::chrono::high_resolution_clock::now();
+            std::string next_variable = service.receiveMessage();
+            time = std::chrono::high_resolution_clock::now() - start;
+            plan_time += time.count();
+
+            start = std::chrono::high_resolution_clock::now();
+            int leaner_result_len = leaner_executor.ProcessNextVariable(next_variable);
+            time = std::chrono::high_resolution_clock::now() - start;
+            std::cout << "Leaner Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+
+            if (!base_executor.query_end() && !leaner_executor.query_end()) {
+                service.sendMessage(std::to_string(base_result_len - leaner_result_len));
+                query_graph = leaner_executor.query_graph();
+                service.sendMessage(query_graph);
+            }
+        }
+        service.sendMessage("end");
+
+        std::cout << "gen plan takes " << plan_time << " ms." << std::endl;
+        std::cout << "base execute takes " << base_executor.execute_cost() << " ms." << std::endl;
+        std::cout << "leaner execute takes " << leaner_executor.execute_cost() << " ms." << std::endl;
+    }
+}
+
+void QueryExecutor::Test(UDPService& service) {
+    uint total_limit = parser_.Limit();
+    for (auto& sub_query : sub_queries_) {
+        service.sendMessage("start");
+
+        auto executor = new SubQueryExecutor(index_, sub_query, total_limit, true);
+        executors_.push_back(executor);
+
+        std::chrono::duration<double, std::milli> time;
+        while (!executor->query_end()) {
+            std::string query_graph = executor->query_graph();
+            service.sendMessage(query_graph);
+
+            std::string next_variable = service.receiveMessage();
+            auto start = std::chrono::high_resolution_clock::now();
+            executor->ProcessNextVariable(next_variable);
+            time = std::chrono::high_resolution_clock::now() - start;
+            std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+        }
+        executor->PostProcess();
+        if (executor->zero_result()) {
+            zero_result_ = true;
+            return;
+        }
+        service.sendMessage("end");
+        uint count = executor->ResultSize();
+        total_limit = (total_limit + count - 1) / count;
+        if (total_limit < 1)
+            total_limit = 1;
+    }
+}
+
 uint QueryExecutor::PrintResult() {
     if (zero_result_)
         return 0;
 
-    uint limit = parser_.Limit();
-    uint count = 0;
+    phmap::flat_hash_map<std::string, std::pair<uint, Position>> var_to_priority_position;
+    uint col_offset = 0;
+    std::vector<uint> col_offsets;
+    for (auto& executor : executors_) {
+        auto vars = executor->variable_order();
+        auto var_group_data = executor->MappingVariable(vars);
+        for (uint v_id = 0; v_id < vars.size(); ++v_id) {
+            auto [it, _] = var_to_priority_position.emplace(vars[v_id], var_group_data[v_id]);
+            it->second.first += col_offset;
+        }
+        col_offsets.push_back(col_offset);
+        col_offset += vars.size();
+    }
 
-    std::vector<ResultGenerator::iterator> sub_query_results;
+    // 直接生成优先级和位置向量
+    const auto& var_print_order = parser_.ProjectVariables();
+    std::vector<std::pair<uint, Position>> var_priority_position;
+    var_priority_position.reserve(var_print_order.size());
+    for (const auto& var : var_print_order)
+        var_priority_position.push_back(var_to_priority_position[var]);
 
-    std::vector<ResultGenerator::iterator> iters;
-    std::vector<ResultGenerator::iterator> begins;
-    std::vector<ResultGenerator::iterator> ends;
-
+    // 初始化迭代器
+    std::vector<ResultGenerator::iterator> iters, begins, ends;
     for (auto& executor : executors_) {
         auto [begin, end] = executor->ResultsIter();
         iters.push_back(begin);
         begins.push_back(begin);
         ends.push_back(end);
-        // std::cout << executor->ResultSize() << std::endl;
     }
 
-    uint sub_query_cnt = sub_queries_.size();
+    for (uint i = 0; i < var_print_order.size(); i++)
+        std::cout << var_print_order[i] << " ";
+    std::cout << std::endl;
 
-    // 执行笛卡尔积
+    uint limit = parser_.Limit();
+    uint count = 0;
+    const uint num_executors = executors_.size();
+    std::vector<uint> result_row(col_offset);
+
+    // 笛卡尔积遍历
     while (true) {
-        // 输出当前组合
-        std::vector<uint> combined_row;
-
-        // 收集所有子查询结果的当前行
-        for (size_t i = 0; i < sub_query_cnt; i++) {
-            std::vector<uint>* current_row = *(iters[i]);
-            combined_row.insert(combined_row.end(), current_row->begin(), current_row->end());
+        // 收集所有执行器的当前行数据
+        for (uint i = 0; i < num_executors; ++i) {
+            const auto& current_row = *(iters[i]);
+            std::copy(current_row->begin(), current_row->end(), result_row.begin() + col_offsets[i]);
         }
 
-        // 输出结果（根据实际情况调整）
-        // for (uint value : combined_row) {
-        //     std::cout << value << " ";
-        // }
-        // std::cout << std::endl;
+        // 输出结果
+        for (const auto& [index, pos] : var_priority_position)
+            std::cout << index_->ID2String(result_row[index], pos) << " ";
+        std::cout << std::endl;
 
-        count++;
-
-        // 检查是否达到限制
-        if (limit > 0 && count >= limit)
+        if (++count >= limit)
             break;
 
         // 移动到下一个组合
-        int idx = sub_query_cnt - 1;
-        bool all_done = false;
-
-        while (idx >= 0) {
-            iters[idx]++;
-
-            if (iters[idx] == ends[idx]) {
-                // 当前迭代器到达末尾，重置并检查前一个
-                if (idx == 0) {
-                    // 这是第一个迭代器，所有组合都已遍历完毕
-                    all_done = true;
-                    break;
-                }
-                iters[idx] = begins[idx];
-                idx--;
-            } else {
-                // 当前迭代器还有更多元素，继续处理
-                break;
-            }
-        }
-
-        if (all_done || idx < 0) {
-            break;
+        int idx = num_executors - 1;
+        while (idx >= 0 && ++iters[idx] == ends[idx]) {
+            iters[idx] = begins[idx];
+            if (--idx < 0)
+                return count;  // 所有组合遍历完成
         }
     }
 

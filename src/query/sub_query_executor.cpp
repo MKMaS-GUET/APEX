@@ -640,6 +640,14 @@ std::string SubQueryExecutor::query_graph() {
     return pre_processor_.query_graph();
 }
 
+std::vector<std::string> SubQueryExecutor::variable_order() {
+    return variable_order_;
+}
+
+std::vector<std::pair<uint, Position>> SubQueryExecutor::MappingVariable(const std::vector<std::string>& variables) {
+    return pre_processor_.MappingVariable(variables);
+}
+
 std::vector<ResultMap>& SubQueryExecutor::result_map() {
     return result_map_;
 }
