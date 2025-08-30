@@ -56,14 +56,15 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
                 std::chrono::high_resolution_clock::now() - query_start;
 
             std::cout << result_count << " result(s)." << std::endl;
-            std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
-            std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
-            std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
+            // std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
+            // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
+            // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
+            // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             std::cout << "query takes " << query_time.count() << " ms." << std::endl;
 
             total_time += query_time.count();
         }
-        std::cout << "avg query takes " << total_time / sparqls.size() << std::endl;
+        // std::cout << "avg query takes " << total_time / sparqls.size() << std::endl;
         exit(0);
     }
 }
@@ -76,7 +77,7 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
         if (in.is_open()) {
             std::string line;
             std::string sparql;
-            while (std::getline(in, sparql)) 
+            while (std::getline(in, sparql))
                 sparqls.push_back(sparql);
             in.close();
         }
@@ -138,6 +139,7 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
             std::cout << result_count << " result(s)." << std::endl;
             std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
             std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
+            std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             std::cout << "query takes " << query_time.count() << " ms." << std::endl;
 

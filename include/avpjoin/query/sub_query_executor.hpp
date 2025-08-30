@@ -40,6 +40,8 @@ class SubQueryExecutor {
 
     std::chrono::duration<double, std::milli> execute_cost_;
 
+    std::chrono::duration<double, std::milli> build_group_cost_;
+
     std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
     uint ParallelJoin(std::vector<Variable*> vars, std::vector<VariableGroup*> variable_groups, ResultMap& result);
@@ -75,6 +77,8 @@ class SubQueryExecutor {
     double preprocess_cost();
 
     double execute_cost();
+
+    double build_group_cost();
 
     double gen_result_cost();
 

@@ -1,27 +1,32 @@
 #include "avpjoin/query/result_generator.hpp"
 #include "avpjoin/query/result_map_iterator.hpp"
 
-ResultGenerator::ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation, uint limit) {
+ResultGenerator::ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>> &result_relation, uint limit) {
     result_relation_ = result_relation;
     limit_ = limit;
     gen_cost_ = std::chrono::duration<double, std::milli>(0);
     count_ = new std::atomic<uint>(0);
 }
 
-bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint, uint> first_variable_range) {
+bool ResultGenerator::Update(std::vector<ResultMap> &result_map, std::pair<uint, uint> first_variable_range) {
     auto begin = std::chrono::high_resolution_clock::now();
 
-    std::vector<ResultMap*> result_map_p;
+    std::vector<ResultMap *> result_map_p;
 
-    for (auto& map : result_map)
+    for (auto &map : result_map)
         result_map_p.push_back(&map);
 
-    uint total_range = first_variable_range.second - first_variable_range.first;
+    uint total_range = 0;
+    if (first_variable_range.second == __UINT32_MAX__)
+        total_range = result_map[0].begin()->second->size();
+    else
+        total_range = first_variable_range.second - first_variable_range.first;
+
     uint num_threads = std::min(static_cast<uint>(total_range / 512), static_cast<uint>(16));
     // std::cout << total_range << " " << num_threads << std::endl;
     if (num_threads == 0) {
         ResultMapIterator iter = ResultMapIterator(result_map_p, result_relation_, first_variable_range);
-        std::vector<std::vector<uint>>* results = new std::vector<std::vector<uint>>();
+        std::vector<std::vector<uint>> *results = new std::vector<std::vector<uint>>();
         iter.Start(results, count_, limit_);
         results_.push_back(results);
     } else {
@@ -29,7 +34,7 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
 
         // 存储线程和结果容器的数组
         std::vector<std::thread> threads;
-        std::vector<std::vector<std::vector<uint>>*> thread_results(num_threads);
+        std::vector<std::vector<std::vector<uint>> *> thread_results(num_threads);
         // 创建并启动线程
         for (unsigned int i = 0; i < num_threads; ++i) {
             uint start = first_variable_range.first + i * chunk_size;
@@ -42,11 +47,11 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
             });
         }
         // 等待所有线程完成
-        for (auto& t : threads)
+        for (auto &t : threads)
             t.join();
 
         // 合并结果
-        for (auto* res : thread_results) {
+        for (auto *res : thread_results) {
             if (res && !res->empty())
                 results_.push_back(res);
         }
@@ -64,9 +69,7 @@ ResultGenerator::~ResultGenerator() {
     results_.clear();
 }
 
-double ResultGenerator::gen_cost() {
-    return gen_cost_.count();
-}
+double ResultGenerator::gen_cost() { return gen_cost_.count(); }
 
 ResultGenerator::iterator ResultGenerator::begin() {
     uint o_idx = 0;
@@ -102,7 +105,7 @@ ResultGenerator::iterator ResultGenerator::end() {
 
 uint ResultGenerator::ResultsSize() {
     uint count = 0;
-    for (auto& r : results_)
+    for (auto &r : results_)
         count += r->size();
     return count > limit_ ? limit_ : count;
 }

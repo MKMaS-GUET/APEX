@@ -3,8 +3,8 @@
 
 #include <vector>
 
-#include "avpjoin/utils/udp_service.hpp"
 #include "avpjoin/parser/sparql_parser.hpp"
+#include "avpjoin/utils/udp_service.hpp"
 #include "sub_query_executor.hpp"
 
 class QueryExecutor {
@@ -35,6 +35,8 @@ class QueryExecutor {
     double preprocess_cost();
 
     double execute_cost();
+
+    double build_group_cost();
 
     double gen_result_cost();
 };

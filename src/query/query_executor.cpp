@@ -344,6 +344,13 @@ double QueryExecutor::execute_cost() {
     return time;
 }
 
+double QueryExecutor::build_group_cost() {
+    double time = 0;
+    for (auto e : executors_)
+        time += e->build_group_cost();
+    return time;
+}
+
 double QueryExecutor::gen_result_cost() {
     if (zero_result_)
         return 0;
