@@ -7,7 +7,9 @@ QueryGraph::Edge::Edge(uint id, Position pos, uint dst) : id(id), pos(pos), dst(
 void QueryGraph::AddVertex(std::pair<std::string, uint> vertex) {
     vertexes_.try_emplace(vertex.first, vertexes_.size());
     uint vartex_id = vertexes_[vertex.first];
-    vertex_status_.try_emplace(vartex_id, 1);
+    auto [it, inserted] = vertex_status_.try_emplace(vartex_id, 0);
+    if (!inserted) 
+        it->second = 1;  // 如果已存在，则状态设为1
     if (est_size_[vartex_id] == 0 || vertex.second < est_size_[vartex_id])
         est_size_[vartex_id] = vertex.second;
 }

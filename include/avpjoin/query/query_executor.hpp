@@ -17,6 +17,8 @@ class QueryExecutor {
     SPARQLParser parser_;
     std::vector<SubQueryExecutor*> executors_;
 
+    double gen_plan_cost_;
+
     bool zero_result_;
 
    public:
@@ -39,6 +41,8 @@ class QueryExecutor {
     double build_group_cost();
 
     double gen_result_cost();
+
+    double gen_plan_cost();
 };
 
 #endif

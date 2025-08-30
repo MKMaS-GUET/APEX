@@ -84,7 +84,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
 
             if (plan_generator_)
                 query_graph_.AddEdge({s.value, index->GetByO(oid)->size()}, {p.value, index->GetOPreSet(oid).size()},
-                                     {oid, Position::kObject});
+                                     {0, Position::kObject});
 
             variables_.insert(s.value);
             variables_.insert(p.value);
@@ -111,7 +111,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
             uint sid = index->Term2ID(s);
             if (plan_generator_)
                 query_graph_.AddEdge({p.value, index->GetSPreSet(sid).size()}, {o.value, index->GetByS(sid)->size()},
-                                     {sid, Position::kSubject});
+                                     {0, Position::kSubject});
 
             variables_.insert(p.value);
             variables_.insert(o.value);

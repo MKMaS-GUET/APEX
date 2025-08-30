@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim.adam as adam
 import udp_service
@@ -8,347 +7,167 @@ import json
 import logging
 
 from torch.distributions import Categorical
-from torch_geometric.nn import GCNConv
-
-
-class GraphActorCritic(nn.Module):
-    def __init__(self, node_feature_dim, hidden_dim=128, max_id=10000):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.max_id = max_id
-
-        # 边特征嵌入层
-        self.edge_feat1_embed = nn.Embedding(
-            self.max_id, 4
-        )  # 用于第一个特征，假设ID小于10000
-        self.edge_feat2_embed = nn.Embedding(3, 4)  # 用于第二个特征，值0,1,2
-
-        # 边聚合注意力网络
-        self.edge_attention = nn.Sequential(nn.Linear(8, 8), nn.Tanh(), nn.Linear(8, 1))
-
-        # 使用标准的GCN卷积层，输入维度为node_feature_dim + 8
-        self.conv1 = GCNConv(node_feature_dim + 8, hidden_dim)
-        self.conv2 = GCNConv(hidden_dim, hidden_dim)
-
-        # Actor头
-        self.actor = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-        )
-
-        # Critic头
-        self.critic = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-        )
-
-    def build_node_features(self, query_graph):
-        """构建节点特征，包括边特征聚合，并移动到设备"""
-        status = torch.tensor(query_graph["status"], dtype=torch.float32, device=device)
-        est_size = torch.tensor(
-            query_graph["est_size"], dtype=torch.float32, device=device
-        )
-        # 归一化est_size
-        if est_size.std() > 1e-5:
-            est_size = (est_size - est_size.mean()) / est_size.std()
-        else:
-            est_size = est_size - est_size.mean()
-        # 计算每个节点的入度和出度
-        edges = query_graph["edges"]
-        num_nodes = len(query_graph["vertices"])
-        in_degree = torch.zeros(num_nodes, device=device)
-        out_degree = torch.zeros(num_nodes, device=device)
-        for edge in edges:
-            out_degree[edge[0]] += 1
-            in_degree[edge[1]] += 1
-
-        # 计算总度数
-        total_degree = in_degree + out_degree
-
-        # 计算每个节点的邻居状态统计
-        neighbor_stats = torch.zeros(num_nodes, 6, device=device)
-        status_int = status.int()
-        for i in range(num_nodes):
-            # 入邻居
-            in_neighbors = [edge[0] for edge in edges if edge[1] == i]
-            for neighbor in in_neighbors:
-                neighbor_status = status_int[neighbor].item()
-                if neighbor_status == -1:
-                    neighbor_stats[i, 0] += 1
-                elif neighbor_status == 0:
-                    neighbor_stats[i, 1] += 1
-                elif neighbor_status == 1:
-                    neighbor_stats[i, 2] += 1
-            # 出邻居
-            out_neighbors = [edge[1] for edge in edges if edge[0] == i]
-            for neighbor in out_neighbors:
-                neighbor_status = status_int[neighbor].item()
-                if neighbor_status == -1:
-                    neighbor_stats[i, 3] += 1
-                elif neighbor_status == 0:
-                    neighbor_stats[i, 4] += 1
-                elif neighbor_status == 1:
-                    neighbor_stats[i, 5] += 1
-
-        # 处理边特征聚合
-        edge_features = query_graph.get("edge_features", [])
-        edge_agg_features = torch.zeros(num_nodes, 8, device=device)
-
-        if edge_features:
-            # 将edge_features转换为tensor
-            edge_features_tensor = torch.tensor(
-                edge_features, dtype=torch.long, device=device
-            )  # [num_edges, 2]
-            # 裁剪第一个特征到0-9999范围
-            feat1 = torch.clamp(edge_features_tensor[:, 0], 0, 9999)
-            feat2 = edge_features_tensor[:, 1]
-            # 嵌入特征
-            feat1_embedded = self.edge_feat1_embed(feat1)  # [num_edges, 4]
-            feat2_embedded = self.edge_feat2_embed(feat2)  # [num_edges, 4]
-            edge_embedded = torch.cat(
-                [feat1_embedded, feat2_embedded], dim=1
-            )  # [num_edges, 8]
-
-            # 为每个节点构建边嵌入列表
-            node_edge_embedded = [[] for _ in range(num_nodes)]
-            for idx, edge in enumerate(edges):
-                u, v = edge
-                # 只将与节点相关的边特征添加到该节点的列表中
-                node_edge_embedded[u].append(edge_embedded[idx])
-                node_edge_embedded[v].append(edge_embedded[idx])
-
-            # 对每个节点聚合边嵌入
-            for i in range(num_nodes):
-                if len(node_edge_embedded[i]) > 0:
-                    embeds = torch.stack(node_edge_embedded[i])  # [num_edges_i, 8]
-                    # 计算注意力分数
-                    attention_scores = self.edge_attention(embeds)  # [num_edges_i, 1]
-                    attention_weights = F.softmax(
-                        attention_scores, dim=0
-                    )  # [num_edges_i, 1]
-                    aggregated = torch.sum(attention_weights * embeds, dim=0)  # [8]
-                    edge_agg_features[i] = aggregated
-                # 否则保持为零
-
-        # 拼接所有节点特征
-        node_features = torch.stack(
-            [
-                status,
-                est_size,
-                total_degree,
-                neighbor_stats[:, 0],
-                neighbor_stats[:, 1],
-                neighbor_stats[:, 2],
-                neighbor_stats[:, 3],
-                neighbor_stats[:, 4],
-                neighbor_stats[:, 5],
-            ],
-            dim=1,
-        )  # [num_nodes, 9]
-
-        # 将边聚合特征拼接到节点特征
-        node_features = torch.cat(
-            [node_features, edge_agg_features], dim=1
-        )  # [num_nodes, 17]
-
-        return node_features
-
-    def build_edge_index(self, edges):
-        """构建边索引张量，并移动到设备"""
-        if not edges:
-            return torch.empty((2, 0), dtype=torch.long, device=device)
-        edge_index = (
-            torch.tensor(edges, dtype=torch.long, device=device).t().contiguous()
-        )
-        return edge_index
-
-    def forward(self, query_graph):
-        # 构建节点特征
-        node_features = self.build_node_features(query_graph)
-        num_nodes = node_features.shape[0]
-
-        # 构建边索引
-        edge_index = self.build_edge_index(query_graph["edges"])
-
-        # 图卷积
-        x = F.relu(self.conv1(node_features, edge_index))
-        x = F.relu(self.conv2(x, edge_index))  # [num_nodes, hidden_dim]
-
-        # 全局图表示
-        graph_representation = torch.mean(x, dim=0)  # [hidden_dim]
-
-        # 为每个节点添加全局图信息
-        global_features = graph_representation.unsqueeze(0).repeat(num_nodes, 1)
-        combined_features = torch.cat(
-            [x, global_features], dim=1
-        )  # [num_nodes, hidden_dim * 2]
-
-        # Actor输出
-        action_logits = self.actor(combined_features).squeeze(-1)  # [num_nodes]
-
-        # 屏蔽不可选择的节点（status != 1）
-        status = torch.tensor(query_graph["status"], dtype=torch.float32, device=device)
-        mask = (status == 1).float()
-        if mask.sum() == 0:
-            mask = (status == 0).float()
-        action_logits = action_logits * mask + (1 - mask) * (-1e9)
-
-        # Critic输出
-        pooled_features = torch.mean(combined_features, dim=0)  # [hidden_dim * 2]
-        state_value = self.critic(pooled_features.unsqueeze(0))  # [1, 1]
-
-        return action_logits, state_value.squeeze()
+from module import GraphActorCritic, normalize
 
 
 def train_episode(service: udp_service.UDPService, model, optimizer):
-    print("--------------------------------------------------")
-    """使用UDP服务和图神经网络的训练函数"""
-    states, actions, rewards, log_probs, values = [], [], [], [], []
+    # --- 超参数定义 (Hyperparameters) ---
+    gamma = 0.95  # 折扣因子
+    gae_lambda = 0.95  # GAE 的 lambda 参数
+    ppo_epochs = 5  # PPO 更新的迭代次数
+    clip_epsilon = 0.2  # PPO 裁剪范围
+    entropy_coef = 0.01  # 熵奖励系数
+    value_loss_coef = 0.5  # 价值损失系数
 
-    # 等待开始信号
+    # --- 1. 数据收集 (与原版相同) ---
+    states, actions, rewards_raw, log_probs, values = [], [], [[], []], [], []
+
     msg = service.receive_message()
     if msg != "start":
-        if msg == "train end":
-            return 1
-        return 0
+        return 1 if msg == "train end" else 0
 
     step_count = 0
     while True:
-        # 解析查询图状态
         msg = service.receive_message()
         if msg == "end":
             break
 
         query_graph = json.loads(msg)
-
-        # 检查是否有可选择的节点
-        print(query_graph)
-
-        # 使用图神经网络模型
-        model.train()  # 确保模型处于训练模式
+        logger.info(
+            f"Step {step_count} query graph: {query_graph}"
+        )
+        # 从模型获取动作 logits 和价值
+        model.train()
         action_logits, value = model(query_graph)
 
-        vertices = query_graph["vertices"]
-        # 创建概率分布
+        # 采样动作
         dist = Categorical(logits=action_logits)
         action = dist.sample()
-        action_idx = action.item()
 
-        selected_vertex = vertices[action_idx]
-
-        # 发送选择的动作
-        print(selected_vertex)
+        # 发送动作并接收奖励
+        selected_vertex = query_graph["vertices"][action.item()]
         service.send_message(selected_vertex)
+        reward_tuple = eval(service.receive_message())
 
-        # 接收奖励
-        msg = service.receive_message()
-        if msg == "end":
-            break
-
-        try:
-            reward = float(msg)
-        except ValueError:
-            logger.error(f"Invalid reward value: {msg}")
-            reward = 0
-
-        logger.info(
-            f"Step {step_count}: Selected vertex {selected_vertex}, Reward: {reward}"
-        )
-
-        # 存储数据
+        # 存储轨迹数据
         states.append(query_graph.copy())
         actions.append(action)
-        rewards.append(reward)
+        rewards_raw[0].append(reward_tuple[0])
+        rewards_raw[1].append(reward_tuple[1])
         log_probs.append(dist.log_prob(action))
         values.append(value)
 
         step_count += 1
+        logger.info(
+            f"Selected vertex {selected_vertex}, Reward: {reward_tuple}"
+        )
 
     if not states:
         logger.warning("No data collected in this episode.")
         return 0
 
-    # 对奖励进行归一化
-    mean_reward = np.mean(rewards)
-    std_reward = np.std(rewards)
-    if std_reward > 1e-8:  # 避免除零
-        rewards = [(r - mean_reward) / std_reward for r in rewards]
-    else:
-        rewards = [r - mean_reward for r in rewards]
+    # --- 2. 数据预处理 (与原版类似) ---
+    # 归一化并合并多目标奖励
+    norm_len = normalize(
+        torch.tensor(rewards_raw[0], dtype=torch.float32, device=device)
+    )
+    norm_time = normalize(
+        torch.tensor(rewards_raw[1], dtype=torch.float32, device=device)
+    )
+    rewards = (0.5 * norm_len + 0.5 * norm_time).tolist()
 
-    returns = []
-    R = 0
-    for r in reversed(rewards):
-        R = r + 0.95 * R  # 折扣因子
-        returns.insert(0, R)
+    # 将 list 转换为 tensor
+    log_probs = torch.stack(log_probs).to(device)
+    values = torch.stack(values).to(device)
+    actions = torch.stack(actions).to(device)
 
-    returns = torch.tensor(returns, device=device, dtype=torch.float32)
-    values = torch.stack(values)
-    log_probs = torch.stack(log_probs)
-    actions = torch.stack(actions)
+    # --- 3. 计算优势 (GAE) 和回报 (Returns) ---
+    advantages = torch.zeros(len(rewards), device=device)
+    last_gae_lam = 0
 
-    # 计算优势
-    advantages = returns - values.detach()
+    # 从后向前遍历轨迹
+    for t in reversed(range(len(rewards))):
+        if t == len(rewards) - 1:
+            # 如果是最后一步，没有 next_value
+            next_non_terminal = 0.0
+            next_value = 0.0
+        else:
+            next_non_terminal = 1.0
+            next_value = values[t + 1]
+
+        # 计算时序差分误差 (TD Error)
+        delta = rewards[t] + gamma * next_value * next_non_terminal - values[t]
+        # 计算 GAE 优势
+        advantages[t] = last_gae_lam = (
+            delta + gamma * gae_lambda * next_non_terminal * last_gae_lam
+        )
+
+    # 计算价值函数的目标回报 (Returns for value function)
+    returns = advantages + values
+
+    # 对优势进行归一化，可以增强训练稳定性
     if advantages.std() > 1e-8:  # 避免除零
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     else:
         advantages = advantages - advantages.mean()
 
-    # PPO更新
-    policy_losses = []
-    value_losses = []
+    # --- 4. PPO 更新循环 ---
+    policy_losses, value_losses, entropy_losses = [], [], []
 
-    for _ in range(5):  # PPO更新迭代次数
-        all_action_logits = []
-        all_values = []
+    for _ in range(ppo_epochs):
+        # 性能提示：这里的循环逐一计算模型输出效率较低。
+        new_log_probs, new_values, entropies = [], [], []
 
-        # 重新计算所有状态的动作logits和值
-        for state_data in states:
-            # 注意：这里不要使用 torch.no_grad()，因为我们需要计算梯度
+        for i in range(len(states)):
+            state_data = states[i]
             action_logits, value = model(state_data)
-            all_action_logits.append(action_logits)
-            all_values.append(value)
 
-        # 计算新的对数概率
-        new_log_probs = []
-        for _, (action_logits, action) in enumerate(zip(all_action_logits, actions)):
             dist = Categorical(logits=action_logits)
-            new_log_probs.append(dist.log_prob(action))
+            new_log_probs.append(dist.log_prob(actions[i]))
+            new_values.append(value)
+            entropies.append(dist.entropy())
 
         new_log_probs = torch.stack(new_log_probs)
-        new_values = torch.stack(all_values)
+        new_values = torch.stack(new_values)
+        entropy = torch.stack(entropies).mean()  # 计算平均熵
 
-        # PPO损失
+        # 计算 PPO 策略损失
         ratio = torch.exp(new_log_probs - log_probs.detach())
-        clipped_ratio = torch.clamp(ratio, 0.8, 1.2)
-        policy_loss = -torch.min(ratio * advantages, clipped_ratio * advantages).mean()
-        value_loss = F.mse_loss(new_values, returns)
+        surr1 = ratio * advantages.detach()
+        surr2 = (
+            torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon)
+            * advantages.detach()
+        )
+        policy_loss = -torch.min(surr1, surr2).mean()
 
-        # 总损失
-        loss = policy_loss + 0.5 * value_loss
+        # 计算价值损失
+        value_loss = F.mse_loss(new_values, returns.detach())
 
-        # 记录损失
-        policy_losses.append(policy_loss.item())
-        value_losses.append(value_loss.item())
+        # 总损失 = 策略损失 + 价值损失 - 熵奖励
+        # 减去熵项是为了最大化熵，从而鼓励探索
+        loss = policy_loss + value_loss_coef * value_loss - entropy_coef * entropy
 
-        # 反向传播和优化
+        # 梯度更新
         optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # 梯度裁剪
+        # 开启梯度裁剪以防止梯度爆炸
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
-    # 计算总奖励
+        policy_losses.append(policy_loss.item())
+        value_losses.append(value_loss.item())
+        entropy_losses.append(entropy.item())
+
+    # --- 5. 日志记录 (与原版类似) ---
     total_reward = sum(rewards)
     avg_policy_loss = np.mean(policy_losses)
     avg_value_loss = np.mean(value_losses)
+    avg_entropy = np.mean(entropy_losses)
 
     logger.info(
-        f"Episode finished: Steps={step_count}, Total Reward={total_reward}, "
-        f"Avg Policy Loss={avg_policy_loss:.4f}, Avg Value Loss={avg_value_loss:.4f}"
+        f"Episode finished: Steps={step_count}, Total Reward={total_reward:.4f}, "
+        f"Avg Policy Loss={avg_policy_loss:.4f}, Avg Value Loss={avg_value_loss:.4f}, "
+        f"Avg Entropy={avg_entropy:.4f}"
     )
 
     return 0
@@ -394,6 +213,22 @@ def select_vertex_gnn(query_graph, model):
             return query_graph["vertices"][random_idx]
 
 
+def test():
+    while True:
+        print("-------------------------------------")
+        msg = service.receive_message()
+        if msg == "start":
+            while True:
+                msg = service.receive_message()
+                if msg == "end":
+                    break
+                query_graph = json.loads(msg)
+                print(query_graph)
+                next_variable = select_vertex_gnn(query_graph, model)
+                service.send_message(next_variable)
+                print(next_variable)
+
+
 # 设置日志
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -402,86 +237,14 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
+model = GraphActorCritic(device).to(device)
+optimizer = adam.Adam(model.parameters(), lr=1e-3)
+
 # UDP服务
 service = udp_service.UDPService(2078, 2077)
-msg = service.receive_message()
-max_id = int(msg)
-
-# 初始化模型和优化器
-node_feature_dim = 9  # 根据build_node_features输出的特征维度
-model = GraphActorCritic(node_feature_dim, max_id=max_id).to(device)
-optimizer = adam.Adam(model.parameters(), lr=5e-4)
 
 while not train_episode(service, model, optimizer):
     pass
 
 print("training ends")
-
-while True:
-    print("-------------------------------------")
-    msg = service.receive_message()
-    if msg == "start":
-        while True:
-            msg = service.receive_message()
-            if msg == "end":
-                break
-            query_graph = json.loads(msg)
-            print(query_graph)
-            next_variable = select_vertex_gnn(query_graph, model)
-            service.send_message(next_variable)
-            print(next_variable)
-
-
-# def select_vertex(query_graph):
-#     vertices = query_graph["vertices"]
-#     edges = query_graph["edges"]
-#     status = query_graph["status"]
-#     est_size = query_graph["est_size"]
-
-#     # 找到所有status为1的vertex的索引
-#     candidate_indices = [i for i in range(len(status)) if status[i] == 1]
-
-#     if not candidate_indices:
-#         return None
-
-#     # 为每个候选vertex计算优先级指标
-#     candidates_info = []
-
-#     for idx in candidate_indices:
-#         # 找到该vertex的所有邻居
-#         neighbors = []
-#         for edge in edges:
-#             if edge[0] == idx:
-#                 neighbors.append(edge[1])
-#             elif edge[1] == idx:
-#                 neighbors.append(edge[0])
-
-#         # 统计邻居中状态为-1的个数
-#         negative_neighbors = sum(1 for neighbor in neighbors if status[neighbor] == -1)
-
-#         # 邻居总数
-#         total_neighbors = len(neighbors)
-
-#         # 该vertex的est_size
-#         vertex_est_size = est_size[idx]
-
-#         candidates_info.append(
-#             {
-#                 "index": idx,
-#                 "vertex": vertices[idx],
-#                 "negative_neighbors": negative_neighbors,
-#                 "total_neighbors": total_neighbors,
-#                 "est_size": vertex_est_size,
-#             }
-#         )
-
-#     # 根据优先级规则排序
-#     # 1. 邻居节点状态为-1的个数越小越优先（升序）
-#     # 2. 邻居节点总个数越多越优先（降序）
-#     # 3. est_size越小越优先（升序）
-#     candidates_info.sort(
-#         key=lambda x: (x["negative_neighbors"], -x["total_neighbors"], x["est_size"])
-#     )
-
-#     # 返回优先级最高的vertex
-#     return candidates_info[0]["vertex"]
+test()

@@ -138,13 +138,14 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
                 std::chrono::high_resolution_clock::now() - query_start;
 
             std::cout << result_count << " result(s)." << std::endl;
-            std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
-            std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
-            std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
-            std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            std::cout << "query takes " << query_time.count() << " ms." << std::endl;
+            // std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
+            // std::cout << "gen plan cost takes " << executor.gen_plan_cost() << " ms." << std::endl;
+            // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
+            // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
+            // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
+            std::cout << "query takes " << query_time.count() - executor.gen_plan_cost() << " ms." << std::endl;
 
-            total_time += query_time.count();
+            total_time += (query_time.count() - executor.gen_plan_cost());
         }
         std::cout << "avg query takes " << total_time / sparqls.size() << std::endl;
         exit(0);
