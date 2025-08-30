@@ -64,7 +64,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
 
             total_time += query_time.count();
         }
-        // std::cout << "avg query takes " << total_time / sparqls.size() << std::endl;
+        std::cout << "avg query takes " << total_time / sparqls.size() << std::endl;
         exit(0);
     }
 }
@@ -83,6 +83,7 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
         }
 
         UDPService service = UDPService(2077, 2078);
+        service.sendMessage(std::to_string(index->predicate_cnt()));
 
         std::ios::sync_with_stdio(false);
         for (long unsigned int i = 0; i < sparqls.size(); i++) {

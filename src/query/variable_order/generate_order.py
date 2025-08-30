@@ -12,12 +12,22 @@ from torch_geometric.nn import GCNConv
 
 
 class GraphActorCritic(nn.Module):
-    def __init__(self, node_feature_dim, hidden_dim=128):
+    def __init__(self, node_feature_dim, hidden_dim=128, max_id=10000):
         super().__init__()
         self.hidden_dim = hidden_dim
+        self.max_id = max_id
 
-        # 使用标准的GCN卷积层
-        self.conv1 = GCNConv(node_feature_dim, hidden_dim)
+        # 边特征嵌入层
+        self.edge_feat1_embed = nn.Embedding(
+            self.max_id, 4
+        )  # 用于第一个特征，假设ID小于10000
+        self.edge_feat2_embed = nn.Embedding(3, 4)  # 用于第二个特征，值0,1,2
+
+        # 边聚合注意力网络
+        self.edge_attention = nn.Sequential(nn.Linear(8, 8), nn.Tanh(), nn.Linear(8, 1))
+
+        # 使用标准的GCN卷积层，输入维度为node_feature_dim + 8
+        self.conv1 = GCNConv(node_feature_dim + 8, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, hidden_dim)
 
         # Actor头
@@ -27,17 +37,17 @@ class GraphActorCritic(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
-        # Critic头 - 直接处理二维输入并输出单个值
+        # Critic头
         self.critic = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 2),  # 处理每个节点的特征
+            nn.Linear(hidden_dim * 2, hidden_dim * 2),
             nn.ReLU(),
-            nn.Linear(hidden_dim * 2, hidden_dim),  # 进一步处理
+            nn.Linear(hidden_dim * 2, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 1),  # 输出单个值
+            nn.Linear(hidden_dim, 1),
         )
 
     def build_node_features(self, query_graph):
-        """构建节点特征，并移动到设备"""
+        """构建节点特征，包括边特征聚合，并移动到设备"""
         status = torch.tensor(query_graph["status"], dtype=torch.float32, device=device)
         est_size = torch.tensor(
             query_graph["est_size"], dtype=torch.float32, device=device
@@ -83,14 +93,53 @@ class GraphActorCritic(nn.Module):
                     neighbor_stats[i, 4] += 1
                 elif neighbor_status == 1:
                     neighbor_stats[i, 5] += 1
+
+        # 处理边特征聚合
+        edge_features = query_graph.get("edge_features", [])
+        edge_agg_features = torch.zeros(num_nodes, 8, device=device)
+
+        if edge_features:
+            # 将edge_features转换为tensor
+            edge_features_tensor = torch.tensor(
+                edge_features, dtype=torch.long, device=device
+            )  # [num_edges, 2]
+            # 裁剪第一个特征到0-9999范围
+            feat1 = torch.clamp(edge_features_tensor[:, 0], 0, 9999)
+            feat2 = edge_features_tensor[:, 1]
+            # 嵌入特征
+            feat1_embedded = self.edge_feat1_embed(feat1)  # [num_edges, 4]
+            feat2_embedded = self.edge_feat2_embed(feat2)  # [num_edges, 4]
+            edge_embedded = torch.cat(
+                [feat1_embedded, feat2_embedded], dim=1
+            )  # [num_edges, 8]
+
+            # 为每个节点构建边嵌入列表
+            node_edge_embedded = [[] for _ in range(num_nodes)]
+            for idx, edge in enumerate(edges):
+                u, v = edge
+                # 只将与节点相关的边特征添加到该节点的列表中
+                node_edge_embedded[u].append(edge_embedded[idx])
+                node_edge_embedded[v].append(edge_embedded[idx])
+
+            # 对每个节点聚合边嵌入
+            for i in range(num_nodes):
+                if len(node_edge_embedded[i]) > 0:
+                    embeds = torch.stack(node_edge_embedded[i])  # [num_edges_i, 8]
+                    # 计算注意力分数
+                    attention_scores = self.edge_attention(embeds)  # [num_edges_i, 1]
+                    attention_weights = F.softmax(
+                        attention_scores, dim=0
+                    )  # [num_edges_i, 1]
+                    aggregated = torch.sum(attention_weights * embeds, dim=0)  # [8]
+                    edge_agg_features[i] = aggregated
+                # 否则保持为零
+
         # 拼接所有节点特征
         node_features = torch.stack(
             [
                 status,
                 est_size,
-                # in_degree,
-                # out_degree,
-                total_degree,  # 添加总度数特征
+                total_degree,
                 neighbor_stats[:, 0],
                 neighbor_stats[:, 1],
                 neighbor_stats[:, 2],
@@ -99,7 +148,13 @@ class GraphActorCritic(nn.Module):
                 neighbor_stats[:, 5],
             ],
             dim=1,
-        )  # [num_nodes, 11]
+        )  # [num_nodes, 9]
+
+        # 将边聚合特征拼接到节点特征
+        node_features = torch.cat(
+            [node_features, edge_agg_features], dim=1
+        )  # [num_nodes, 17]
+
         return node_features
 
     def build_edge_index(self, edges):
@@ -119,7 +174,7 @@ class GraphActorCritic(nn.Module):
         # 构建边索引
         edge_index = self.build_edge_index(query_graph["edges"])
 
-        # 图卷积 - 使用标准的GCN卷积层
+        # 图卷积
         x = F.relu(self.conv1(node_features, edge_index))
         x = F.relu(self.conv2(x, edge_index))  # [num_nodes, hidden_dim]
 
@@ -142,8 +197,7 @@ class GraphActorCritic(nn.Module):
             mask = (status == 0).float()
         action_logits = action_logits * mask + (1 - mask) * (-1e9)
 
-        # Critic输出 - 直接处理二维输入并输出单个值
-        # 使用全局池化来处理二维输入
+        # Critic输出
         pooled_features = torch.mean(combined_features, dim=0)  # [hidden_dim * 2]
         state_value = self.critic(pooled_features.unsqueeze(0))  # [1, 1]
 
@@ -348,13 +402,15 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
-# 初始化模型和优化器
-node_feature_dim = 9  # 根据build_node_features输出的特征维度
-model = GraphActorCritic(node_feature_dim).to(device)
-optimizer = adam.Adam(model.parameters(), lr=5e-4)
-
 # UDP服务
 service = udp_service.UDPService(2078, 2077)
+msg = service.receive_message()
+max_id = int(msg)
+
+# 初始化模型和优化器
+node_feature_dim = 9  # 根据build_node_features输出的特征维度
+model = GraphActorCritic(node_feature_dim, max_id=max_id).to(device)
+optimizer = adam.Adam(model.parameters(), lr=5e-4)
 
 while not train_episode(service, model, optimizer):
     pass
@@ -374,7 +430,6 @@ while True:
             next_variable = select_vertex_gnn(query_graph, model)
             service.send_message(next_variable)
             print(next_variable)
-
 
 
 # def select_vertex(query_graph):

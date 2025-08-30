@@ -293,9 +293,9 @@ uint QueryExecutor::PrintResult() {
         ends.push_back(end);
     }
 
-    for (uint i = 0; i < var_print_order.size(); i++)
-        std::cout << var_print_order[i] << " ";
-    std::cout << std::endl;
+    // for (uint i = 0; i < var_print_order.size(); i++)
+    //     std::cout << var_print_order[i] << " ";
+    // std::cout << std::endl;
 
     uint limit = parser_.Limit();
     uint count = 0;
@@ -311,9 +311,9 @@ uint QueryExecutor::PrintResult() {
         }
 
         // 输出结果
-        for (const auto& [index, pos] : var_priority_position)
-            std::cout << index_->ID2String(result_row[index], pos) << " ";
-        std::cout << std::endl;
+        // for (const auto& [index, pos] : var_priority_position)
+        //     std::cout << index_->ID2String(result_row[index], pos) << " ";
+        // std::cout << std::endl;
 
         if (++count >= limit)
             break;
