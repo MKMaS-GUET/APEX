@@ -166,11 +166,11 @@ void QueryExecutor::Query() {
         auto executor = new SubQueryExecutor(index_, sub_query, total_limit, false);
         executors_.push_back(executor);
         executor->Query();
-        if (executor->zero_result()) {
+        uint count = executor->ResultSize();
+        if (executor->zero_result() || count == 0) {
             zero_result_ = true;
             return;
         }
-        uint count = executor->ResultSize();
         total_limit = (total_limit + count - 1) / count;
         if (total_limit < 1)
             total_limit = 1;
@@ -299,9 +299,9 @@ uint QueryExecutor::PrintResult() {
         ends.push_back(end);
     }
 
-    // for (uint i = 0; i < var_print_order.size(); i++)
-    //     std::cout << var_print_order[i] << " ";
-    // std::cout << std::endl;
+    for (uint i = 0; i < var_print_order.size(); i++)
+        std::cout << var_print_order[i] << " ";
+    std::cout << std::endl;
 
     uint limit = parser_.Limit();
     uint count = 0;
@@ -317,9 +317,9 @@ uint QueryExecutor::PrintResult() {
         }
 
         // 输出结果
-        // for (const auto& [index, pos] : var_priority_position)
-        //     std::cout << index_->ID2String(result_row[index], pos) << " ";
-        // std::cout << std::endl;
+        for (const auto& [index, pos] : var_priority_position)
+            std::cout << index_->ID2String(result_row[index], pos) << " ";
+        std::cout << std::endl;
 
         if (++count >= limit)
             break;

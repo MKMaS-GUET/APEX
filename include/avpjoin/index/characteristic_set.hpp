@@ -3,7 +3,6 @@
 
 #include <parallel_hashmap/btree.h>
 #include <parallel_hashmap/phmap.h>
-
 #include <span>
 #include <vector>
 
