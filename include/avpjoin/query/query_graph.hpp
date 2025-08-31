@@ -21,6 +21,8 @@ class QueryGraph {
     // -1:被选择过 0:没有被选择 1:下一步可选
     phmap::flat_hash_map<uint, int> vertex_status_;
 
+    phmap::flat_hash_map<uint, uint> vertex_degree_;
+
     phmap::flat_hash_map<uint, uint> est_size_;
 
     phmap::flat_hash_map<uint, uint> est_size_updated_;
@@ -33,6 +35,8 @@ class QueryGraph {
     void AddVertex(std::pair<std::string, uint> vertex);
 
     void AddEdge(std::pair<std::string, uint> src, std::pair<std::string, uint> dst, std::pair<uint, Position> edge);
+
+    void Init();
 
     void UpdateQueryGraph(std::string variable, uint result_map_len);
 

@@ -17,6 +17,32 @@ def normalize(x):
     return (x - mean) / std if std > 1e-8 else x - mean
 
 
+class RunningMeanStd:
+    def __init__(self):
+        self.mean = 0
+        self.var = 1
+        self.count = 1e-4
+
+    def update(self, x: torch.Tensor):
+        batch_mean = x.mean()
+        batch_var = x.var(unbiased=False)
+        batch_count = len(x)
+
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + delta**2 * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+
+        self.mean, self.var, self.count = new_mean, new_var, tot_count
+
+    def normalize(self, x: torch.Tensor):
+        return torch.tanh((x - self.mean) / (self.var**0.5 + 1e-8))
+
+
 class GraphActorCritic(nn.Module):
     def __init__(self, device, node_feature_dim=13, hidden_dim=256, max_id=10000):
         super().__init__()
@@ -25,7 +51,7 @@ class GraphActorCritic(nn.Module):
         self.device = device
 
         # 边特征嵌入层
-        self.edge_feat1_embed = nn.Embedding(self.max_id, 5)  # 用于第一个特征，假设ID小于10000
+        self.edge_feat1_embed = nn.Embedding(self.max_id + 1, 5)  # 用于第一个特征
         self.edge_feat2_embed = nn.Embedding(3, 3)  # 用于第二个特征，值0,1,2
 
         # 边聚合注意力网络
@@ -55,9 +81,13 @@ class GraphActorCritic(nn.Module):
 
         """构建节点特征，包括边特征聚合，并移动到设备"""
 
-        status = torch.tensor(query_graph["status"], dtype=torch.float32, device=self.device)
+        status = torch.tensor(
+            query_graph["status"], dtype=torch.float32, device=self.device
+        )
         est_size = normalize(
-            torch.tensor(query_graph["est_size"], dtype=torch.float32, device=self.device)
+            torch.tensor(
+                query_graph["est_size"], dtype=torch.float32, device=self.device
+            )
         )
 
         # 计算总度数
@@ -185,7 +215,9 @@ class GraphActorCritic(nn.Module):
         action_logits = self.actor(combined_features).squeeze(-1)  # [num_nodes]
 
         # 屏蔽不可选择的节点（status != 1）
-        status = torch.tensor(query_graph["status"], dtype=torch.float32, device=self.device)
+        status = torch.tensor(
+            query_graph["status"], dtype=torch.float32, device=self.device
+        )
         mask = (status == 1).float()
         if mask.sum() == 0:
             mask = (status == 0).float()

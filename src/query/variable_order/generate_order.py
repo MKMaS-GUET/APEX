@@ -1,25 +1,24 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
-import torch.optim.adam as adam
 import udp_service
 import json
 import logging
 
 from torch.distributions import Categorical
-from module import GraphActorCritic, normalize
+from module import GraphActorCritic, RunningMeanStd
 
 
-def train_episode(service: udp_service.UDPService, model, optimizer):
-    # --- 超参数定义 (Hyperparameters) ---
-    gamma = 0.95  # 折扣因子
-    gae_lambda = 0.95  # GAE 的 lambda 参数
-    ppo_epochs = 5  # PPO 更新的迭代次数
-    clip_epsilon = 0.2  # PPO 裁剪范围
-    entropy_coef = 0.01  # 熵奖励系数
-    value_loss_coef = 0.5  # 价值损失系数
+def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, device):
+    # --- 超参数 ---
+    gamma = 0.95
+    gae_lambda = 0.95
+    ppo_epochs = 5
+    clip_epsilon = 0.2
+    entropy_coef = 0.001
+    value_loss_coef = 1.0
 
-    # --- 1. 数据收集 (与原版相同) ---
+    # --- 1. Rollout 收集数据 ---
     states, actions, rewards_raw, log_probs, values = [], [], [[], []], [], []
 
     msg = service.receive_message()
@@ -33,105 +32,132 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
             break
 
         query_graph = json.loads(msg)
-        logger.info(
-            f"Step {step_count} query graph: {query_graph}"
-        )
-        # 从模型获取动作 logits 和价值
-        model.train()
-        action_logits, value = model(query_graph)
+        # logger.info(f"Step {step_count} query graph: {query_graph}")
 
-        # 采样动作
-        dist = Categorical(logits=action_logits)
-        action = dist.sample()
+        # --- 模型前向 (不需要梯度) ---
+        with torch.no_grad():
+            action_logits, value = model(query_graph)
 
-        # 发送动作并接收奖励
-        selected_vertex = query_graph["vertices"][action.item()]
+            # 候选节点掩码
+            candidate_indices = [
+                i for i, s in enumerate(query_graph["status"]) if s == 1
+            ]
+            if not candidate_indices:
+                candidate_indices = [
+                    i for i, s in enumerate(query_graph["status"]) if s == 0
+                ]
+
+            candidate_logits = action_logits[candidate_indices]
+            dist = Categorical(logits=candidate_logits)
+
+            action_rel = dist.sample()
+            action_idx = candidate_indices[action_rel.item()]
+            log_prob = dist.log_prob(action_rel)
+
+        # 环境交互
+        selected_vertex = query_graph["vertices"][action_idx]
         service.send_message(selected_vertex)
         reward_tuple = eval(service.receive_message())
 
-        # 存储轨迹数据
+        # 存储数据
         states.append(query_graph.copy())
-        actions.append(action)
+        actions.append(torch.tensor(action_idx, device=device))
         rewards_raw[0].append(reward_tuple[0])
         rewards_raw[1].append(reward_tuple[1])
-        log_probs.append(dist.log_prob(action))
-        values.append(value)
+        log_probs.append(log_prob)
+        values.append(value.squeeze(-1))  # 保证是 [ ]
 
         step_count += 1
-        logger.info(
-            f"Selected vertex {selected_vertex}, Reward: {reward_tuple}"
-        )
+        logger.info(f"Selected vertex {selected_vertex}, Reward: {reward_tuple}")
 
     if not states:
         logger.warning("No data collected in this episode.")
         return 0
 
-    # --- 2. 数据预处理 (与原版类似) ---
-    # 归一化并合并多目标奖励
-    norm_len = normalize(
-        torch.tensor(rewards_raw[0], dtype=torch.float32, device=device)
-    )
-    norm_time = normalize(
-        torch.tensor(rewards_raw[1], dtype=torch.float32, device=device)
-    )
-    rewards = (0.5 * norm_len + 0.5 * norm_time).tolist()
+    # --- 2. 奖励预处理 ---
+    len_rew = torch.tensor(rewards_raw[0], dtype=torch.float32, device=device)
+    len_reward_rms.update(len_rew)
+    norm_len = len_reward_rms.normalize(len_rew)
 
-    # 将 list 转换为 tensor
+    time_rew = torch.tensor(rewards_raw[1], dtype=torch.float32, device=device)
+    time_rew = torch.where(
+        torch.abs(time_rew) < 10, torch.tensor(1.0, device=device), time_rew
+    )
+    time_reward_rms.update(time_rew)
+    norm_time = time_reward_rms.normalize(time_rew)
+
+    rewards = (0.4 * norm_len + 0.6 * norm_time).tolist()
+
+    # --- 3. 计算 Advantage (GAE) 和 Returns (MC) ---
+    values = torch.stack(values).to(device)  # [T]
     log_probs = torch.stack(log_probs).to(device)
-    values = torch.stack(values).to(device)
     actions = torch.stack(actions).to(device)
 
-    # --- 3. 计算优势 (GAE) 和回报 (Returns) ---
     advantages = torch.zeros(len(rewards), device=device)
     last_gae_lam = 0
+    returns = torch.zeros(len(rewards), device=device)
+    future_return = 0
 
-    # 从后向前遍历轨迹
+    # Monte Carlo returns
+    for t in reversed(range(len(rewards))):
+        future_return = rewards[t] + gamma * future_return
+        returns[t] = future_return
+
+    # GAE advantages
     for t in reversed(range(len(rewards))):
         if t == len(rewards) - 1:
-            # 如果是最后一步，没有 next_value
-            next_non_terminal = 0.0
-            next_value = 0.0
+            next_non_terminal, next_value = 0.0, 0.0
         else:
-            next_non_terminal = 1.0
-            next_value = values[t + 1]
+            next_non_terminal, next_value = 1.0, values[t + 1]
 
-        # 计算时序差分误差 (TD Error)
         delta = rewards[t] + gamma * next_value * next_non_terminal - values[t]
-        # 计算 GAE 优势
         advantages[t] = last_gae_lam = (
             delta + gamma * gae_lambda * next_non_terminal * last_gae_lam
         )
 
-    # 计算价值函数的目标回报 (Returns for value function)
-    returns = advantages + values
-
-    # 对优势进行归一化，可以增强训练稳定性
-    if advantages.std() > 1e-8:  # 避免除零
+    # Advantage 标准化 + 截断
+    if advantages.numel() > 1 and advantages.std() > 1e-8:
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     else:
         advantages = advantages - advantages.mean()
 
-    # --- 4. PPO 更新循环 ---
+    # --- 4. PPO 更新 ---
     policy_losses, value_losses, entropy_losses = [], [], []
 
     for _ in range(ppo_epochs):
-        # 性能提示：这里的循环逐一计算模型输出效率较低。
         new_log_probs, new_values, entropies = [], [], []
 
         for i in range(len(states)):
-            state_data = states[i]
-            action_logits, value = model(state_data)
+            action_logits, value = model(states[i])
 
-            dist = Categorical(logits=action_logits)
-            new_log_probs.append(dist.log_prob(actions[i]))
-            new_values.append(value)
+            # 候选掩码（和 rollout 一致）
+            candidate_indices = [j for j, s in enumerate(states[i]["status"]) if s == 1]
+            if not candidate_indices:
+                candidate_indices = [
+                    j for j, s in enumerate(states[i]["status"]) if s == 0
+                ]
+
+            candidate_logits = action_logits[candidate_indices]
+            dist = Categorical(logits=candidate_logits)
+
+            # 找到动作在候选集里的相对 index
+            action_global = actions[i].item()
+            if action_global in candidate_indices:
+                rel_idx = candidate_indices.index(action_global)
+                rel_idx = torch.tensor(rel_idx, device=device)
+            else:
+                # 如果 rollout 时选的动作不在候选集（理论上不会发生）
+                rel_idx = torch.tensor(0, device=device)
+
+            new_log_probs.append(dist.log_prob(rel_idx))
+            new_values.append(value.squeeze(-1))
             entropies.append(dist.entropy())
 
         new_log_probs = torch.stack(new_log_probs)
         new_values = torch.stack(new_values)
-        entropy = torch.stack(entropies).mean()  # 计算平均熵
+        entropy = torch.stack(entropies).mean()
 
-        # 计算 PPO 策略损失
+        # PPO 策略损失
         ratio = torch.exp(new_log_probs - log_probs.detach())
         surr1 = ratio * advantages.detach()
         surr2 = (
@@ -140,17 +166,14 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         )
         policy_loss = -torch.min(surr1, surr2).mean()
 
-        # 计算价值损失
+        # 价值损失
         value_loss = F.mse_loss(new_values, returns.detach())
 
-        # 总损失 = 策略损失 + 价值损失 - 熵奖励
-        # 减去熵项是为了最大化熵，从而鼓励探索
+        # 总损失
         loss = policy_loss + value_loss_coef * value_loss - entropy_coef * entropy
 
-        # 梯度更新
         optimizer.zero_grad()
         loss.backward()
-        # 开启梯度裁剪以防止梯度爆炸
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
@@ -158,16 +181,13 @@ def train_episode(service: udp_service.UDPService, model, optimizer):
         value_losses.append(value_loss.item())
         entropy_losses.append(entropy.item())
 
-    # --- 5. 日志记录 (与原版类似) ---
+    # --- 5. 日志 ---
     total_reward = sum(rewards)
-    avg_policy_loss = np.mean(policy_losses)
-    avg_value_loss = np.mean(value_losses)
-    avg_entropy = np.mean(entropy_losses)
-
     logger.info(
         f"Episode finished: Steps={step_count}, Total Reward={total_reward:.4f}, "
-        f"Avg Policy Loss={avg_policy_loss:.4f}, Avg Value Loss={avg_value_loss:.4f}, "
-        f"Avg Entropy={avg_entropy:.4f}"
+        f"Avg Policy Loss={np.mean(policy_losses):.4f}, "
+        f"Avg Value Loss={np.mean(value_losses):.4f}, "
+        f"Avg Entropy={np.mean(entropy_losses):.4f}"
     )
 
     return 0
@@ -237,13 +257,26 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
-model = GraphActorCritic(device).to(device)
-optimizer = adam.Adam(model.parameters(), lr=1e-3)
-
-# UDP服务
 service = udp_service.UDPService(2078, 2077)
+max_id = int(service.receive_message())
 
-while not train_episode(service, model, optimizer):
+model = GraphActorCritic(device, max_id=max_id).to(device)
+len_reward_rms = RunningMeanStd()
+time_reward_rms = RunningMeanStd()
+
+actor_params = list(model.actor.parameters())
+critic_params = list(model.critic.parameters())
+
+optimizer = torch.optim.Adam(
+    [
+        {"params": actor_params, "lr": 1e-4},
+        {"params": critic_params, "lr": 1e-4},
+    ]
+)
+
+while not train_episode(
+    service, model, optimizer, len_reward_rms, time_reward_rms, device
+):
     pass
 
 print("training ends")

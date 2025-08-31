@@ -274,6 +274,73 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
     return result_len;
 }
 
+uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap& result) {
+    std::vector<std::span<uint>> lists;
+    for (auto& var : vars)
+        lists.push_back(var->PreRetrieve());
+
+    if (lists.size() == 1) {
+        std::vector<uint>* final_result = new std::vector<uint>();
+        final_result->reserve(lists[0].size());
+        final_result->insert(final_result->end(), lists[0].begin(), lists[0].end());
+        result.emplace(std::vector<uint>(0), final_result);
+        return final_result->size();
+    }
+
+    // 找到最大的list
+    uint max_idx = 0;
+    uint max_size = lists[0].size();
+    for (uint i = 1; i < lists.size(); ++i) {
+        if (lists[i].size() > max_size) {
+            max_size = lists[i].size();
+            max_idx = i;
+        }
+    }
+
+    // 分块并行
+    uint num_threads = std::min<uint>(16, max_size / 10000 + 1);
+    uint chunk_size = (max_size + num_threads - 1) / num_threads;
+
+    std::vector<std::vector<uint>> partial_results(num_threads);
+    std::vector<std::thread> threads;
+
+    for (uint t = 0; t < num_threads; ++t) {
+        uint begin = t * chunk_size;
+        uint end = std::min(max_size, (t + 1) * chunk_size);
+
+        threads.emplace_back([&, begin, end, t]() {
+            JoinList join_list;
+            for (uint i = 0; i < lists.size(); ++i) {
+                if (i == max_idx)
+                    join_list.AddList(lists[i].subspan(begin, end - begin));
+                else
+                    join_list.AddList(lists[i]);
+            }
+            std::vector<uint>* intersection = LeapfrogJoin(join_list);
+            partial_results[t] = std::move(*intersection);
+            delete intersection;
+        });
+    }
+
+    for (auto& th : threads) {
+        if (th.joinable())
+            th.join();
+    }
+
+    uint size = 0;
+    for (auto& part : partial_results)
+        size += part.size();
+
+    std::vector<uint>* final_result = new std::vector<uint>();
+    final_result->reserve(size);
+    for (auto& part : partial_results)
+        final_result->insert(final_result->end(), part.begin(), part.end());
+
+    result.emplace(std::vector<uint>(vars.size(), 0), final_result);
+
+    return final_result->size();
+}
+
 std::vector<VariableGroup::Group> SubQueryExecutor::GetVariableGroup() {
     std::vector<std::vector<uint>> var_ancestors;
     if (plan_.empty())
@@ -439,7 +506,11 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
     std::vector<VariableGroup*> variable_groups = GetResultRelationAndVariableGroup(next_vars);
 
     result_map_[variable_id_].clear();
-    uint result_len = ParallelJoin(next_vars, variable_groups, result_map_[variable_id_]);
+    uint result_len = 0;
+    if (variable_id_ != 0)
+        result_len = ParallelJoin(next_vars, variable_groups, result_map_[variable_id_]);
+    else
+        result_len = FirstVariableJoin(next_vars, result_map_[variable_id_]);
     // std::cout << "result_len: " << result_len << std::endl;
     if (variable_id_ == 0)
         first_variable_result_len_ = result_len;
@@ -450,7 +521,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
     if (variable_order_.size() == pre_processor_.VariableCount())
         processed_flag_ = true;
 
-    if (pre_processor_.plan_generator())
+    if (pre_processor_.use_order_generator())
         pre_processor_.UpdateQueryGraph(variable, result_len);
 
     variable_id_++;
@@ -477,6 +548,7 @@ void SubQueryExecutor::PostProcess() {
             break;
 
         first_variable_range_.first = first_variable_range_.second;
+        batch_size_ *= 1.5;
         first_variable_range_.second += batch_size_;
 
         variable_id_ = 1;
@@ -514,7 +586,7 @@ void SubQueryExecutor::Query() {
             break;
 
         first_variable_range_.first = first_variable_range_.second;
-        batch_size_ *= 2;
+        batch_size_ *= 1.5;
         first_variable_range_.second += batch_size_;
 
         variable_id_ = 1;
@@ -545,23 +617,23 @@ uint SubQueryExecutor::ResultSize() {
 SubQueryExecutor::~SubQueryExecutor() {
     if (zero_result_)
         return;
-    size_t num_threads = 16;
+    uint num_threads = 16;
 
     for (auto& map : result_map_) {
         if (map.empty())
             continue;
 
-        size_t total = map.size();
-        size_t chunk_size = (total + num_threads - 1) / num_threads;
+        uint total = map.size();
+        uint chunk_size = (total + num_threads - 1) / num_threads;
 
         std::vector<std::pair<ResultMap::iterator, ResultMap::iterator>> ranges;
         ranges.reserve(num_threads);
 
         auto it = map.begin();
-        for (size_t t = 0; t < num_threads; ++t) {
+        for (uint t = 0; t < num_threads; ++t) {
             auto start_it = it;
-            size_t remaining = (t * chunk_size >= total) ? 0 : std::min(chunk_size, total - t * chunk_size);
-            for (size_t s = 0; s < remaining && it != map.end(); ++s)
+            uint remaining = (t * chunk_size >= total) ? 0 : std::min(chunk_size, total - t * chunk_size);
+            for (uint s = 0; s < remaining && it != map.end(); ++s)
                 ++it;
             auto end_it = it;
             if (start_it != end_it)

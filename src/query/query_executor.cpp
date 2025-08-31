@@ -248,7 +248,7 @@ void QueryExecutor::Test(UDPService& service) {
             start = std::chrono::high_resolution_clock::now();
             executor->ProcessNextVariable(next_variable);
             time = std::chrono::high_resolution_clock::now() - start;
-            // std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+            std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
         }
         service.sendMessage("end");
         if (!executor->zero_result()) {
@@ -259,6 +259,10 @@ void QueryExecutor::Test(UDPService& service) {
         }
 
         uint count = executor->ResultSize();
+        if (count == 0) {
+            zero_result_ = true;
+            return;
+        }
         total_limit = (total_limit + count - 1) / count;
         if (total_limit < 1)
             total_limit = 1;

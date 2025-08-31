@@ -4,12 +4,12 @@ using TripplePattern = std::vector<std::array<SPARQLParser::Term, 3>>;
 
 PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
                            const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
-                           bool plan_generator) {
+                           bool use_order_generator) {
     auto begin = std::chrono::high_resolution_clock::now();
 
     zero_result_ = false;
 
-    plan_generator_ = plan_generator;
+    use_order_generator_ = use_order_generator;
 
     TripplePattern one_variable_tp;
     TripplePattern two_variable_tp;
@@ -42,7 +42,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
             uint pid = index->Term2ID(p);
             set = index->GetByOP(oid, pid);
 
-            if (plan_generator_)
+            if (use_order_generator_)
                 query_graph_.AddVertex({s.value, set->size()});
 
             variables_.insert(s.value);
@@ -53,7 +53,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
             uint oid = index->Term2ID(o);
             set = index->GetBySO(sid, oid);
 
-            if (plan_generator_)
+            if (use_order_generator_)
                 query_graph_.AddVertex({p.value, set->size()});
 
             variables_.insert(p.value);
@@ -64,7 +64,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
             uint pid = index->Term2ID(p);
             set = index->GetBySP(sid, pid);
 
-            if (plan_generator_)
+            if (use_order_generator_)
                 query_graph_.AddVertex({o.value, set->size()});
 
             variables_.insert(o.value);
@@ -82,7 +82,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
         if (s.IsVariable() && p.IsVariable()) {
             uint oid = index->Term2ID(o);
 
-            if (plan_generator_)
+            if (use_order_generator_)
                 query_graph_.AddEdge({s.value, index->GetByO(oid)->size()}, {p.value, index->GetOPreSet(oid).size()},
                                      {0, Position::kObject});
 
@@ -96,7 +96,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
         if (s.IsVariable() && o.IsVariable()) {
             uint pid = index->Term2ID(p);
 
-            if (plan_generator_)
+            if (use_order_generator_)
                 query_graph_.AddEdge({s.value, index->GetSSetSize(pid)}, {o.value, index->GetOSetSize(pid)},
                                      {pid, Position::kPredicate});
 
@@ -109,7 +109,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
         }
         if (p.IsVariable() && o.IsVariable()) {
             uint sid = index->Term2ID(s);
-            if (plan_generator_)
+            if (use_order_generator_)
                 query_graph_.AddEdge({p.value, index->GetSPreSet(sid).size()}, {o.value, index->GetByS(sid)->size()},
                                      {0, Position::kSubject});
 
@@ -121,6 +121,8 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
             o_var.connection = &p_var;
         }
     }
+    if (use_order_generator_)
+        query_graph_.Init();
 
     auto end = std::chrono::high_resolution_clock::now();
     process_cost_ = end - begin;
@@ -190,8 +192,8 @@ std::string PreProcessor::query_graph() {
     return query_graph_.ToString();
 }
 
-bool PreProcessor::plan_generator() {
-    return plan_generator_;
+bool PreProcessor::use_order_generator() {
+    return use_order_generator_;
 }
 
 double PreProcessor::process_cost() {

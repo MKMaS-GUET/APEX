@@ -16,7 +16,7 @@ class PreProcessor {
 
     QueryGraph query_graph_;
 
-    bool plan_generator_;
+    bool use_order_generator_;
 
     std::chrono::duration<double, std::milli> process_cost_;
 
@@ -39,7 +39,7 @@ class PreProcessor {
 
     std::string query_graph();
 
-    bool plan_generator();
+    bool use_order_generator();
 
     double process_cost();
 

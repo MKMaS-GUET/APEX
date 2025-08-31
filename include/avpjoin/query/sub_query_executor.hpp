@@ -44,6 +44,8 @@ class SubQueryExecutor {
 
     std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
+    uint FirstVariableJoin(std::vector<Variable*> vars, ResultMap& result);
+
     uint ParallelJoin(std::vector<Variable*> vars, std::vector<VariableGroup*> variable_groups, ResultMap& result);
 
     std::vector<VariableGroup::Group> GetVariableGroup();

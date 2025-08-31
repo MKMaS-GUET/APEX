@@ -7,9 +7,11 @@ QueryGraph::Edge::Edge(uint id, Position pos, uint dst) : id(id), pos(pos), dst(
 void QueryGraph::AddVertex(std::pair<std::string, uint> vertex) {
     vertexes_.try_emplace(vertex.first, vertexes_.size());
     uint vartex_id = vertexes_[vertex.first];
-    auto [it, inserted] = vertex_status_.try_emplace(vartex_id, 0);
-    if (!inserted) 
-        it->second = 1;  // 如果已存在，则状态设为1
+    vertex_status_.try_emplace(vartex_id, 0);
+
+    auto [it, inserted] = vertex_degree_.try_emplace(vartex_id, 1);
+    if (!inserted)
+        it->second += 1;
     if (est_size_[vartex_id] == 0 || vertex.second < est_size_[vartex_id])
         est_size_[vartex_id] = vertex.second;
 }
@@ -22,6 +24,24 @@ void QueryGraph::AddEdge(std::pair<std::string, uint> src,
     uint src_id = vertexes_[src.first];
     uint dst_id = vertexes_[dst.first];
     adjacency_list_[src_id].push_back({edge.first, edge.second, dst_id});
+}
+
+void QueryGraph::Init() {
+    std::vector<std::pair<std::string, uint>> var_degree_pairs;
+    for (auto& [v, id] : vertexes_) {
+        uint degree = vertex_degree_[id];
+        if (degree > 1) 
+            var_degree_pairs.emplace_back(v, degree);
+    }
+
+    std::sort(var_degree_pairs.begin(), var_degree_pairs.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+
+    uint topk = 1;
+    for (size_t i = 0; i < std::min<size_t>(topk, var_degree_pairs.size()); ++i) {
+        std::string candidate = var_degree_pairs[i].first;
+        vertex_status_[vertexes_[candidate]] = 1;
+    }
 }
 
 void QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
