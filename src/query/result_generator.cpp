@@ -13,8 +13,11 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
 
     std::vector<ResultMap*> result_map_p;
 
-    for (auto& map : result_map)
+    for (auto& map : result_map) {
+        if (map.size() == 0)
+            return count_->load() < limit_ || limit_ == __UINT32_MAX__;
         result_map_p.push_back(&map);
+    }
 
     uint first_map_size = result_map[0].begin()->second->size();
     uint total_range = 0;
@@ -60,11 +63,10 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
                 results_.push_back(res);
         }
     }
-
     gen_cost_ += std::chrono::high_resolution_clock::now() - begin;
     std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
     // std::cout << "gen_cost: " << time.count() << std::endl;
-    return count_->load() < limit_ || limit_ == __UINT32_MAX__;
+    return count_->load() > limit_ && limit_ != __UINT32_MAX__;
 }
 
 ResultGenerator::~ResultGenerator() {

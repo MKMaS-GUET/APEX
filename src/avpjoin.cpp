@@ -64,7 +64,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
 
             total_time += query_time.count();
         }
-        std::cout << "avg query takes " << total_time / sparqls.size() << std::endl;
+        std::cout << "avg query time: " << total_time / sparqls.size() << " ms." << std::endl;
         exit(0);
     }
 }
@@ -147,7 +147,7 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
 
             total_time += (query_time.count() - executor.gen_plan_cost());
         }
-        std::cout << "avg query takes " << total_time / sparqls.size() << std::endl;
+        std::cout << "avg query time: " << total_time / sparqls.size() << " ms." << std::endl;
         exit(0);
     }
 }

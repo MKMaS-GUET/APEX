@@ -36,11 +36,15 @@ class SubQueryExecutor {
     std::pair<uint, uint> first_variable_range_;
     uint first_variable_result_len_;
 
-    bool processed_flag_;
+    bool ordering_complete_flag_;
 
     std::chrono::duration<double, std::milli> execute_cost_;
 
     std::chrono::duration<double, std::milli> build_group_cost_;
+
+    void UpdateStatus(std::string variable, uint result_len);
+
+    bool UpdateFirstVariableRange();
 
     std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
@@ -68,13 +72,13 @@ class SubQueryExecutor {
 
     void PostProcess();
 
+    void Reset();
+
     void Query();
 
     std::pair<ResultGenerator::iterator, ResultGenerator::iterator> ResultsIter();
 
     uint ResultSize();
-
-    bool zero_result();
 
     double preprocess_cost();
 
@@ -95,6 +99,8 @@ class SubQueryExecutor {
     std::vector<std::vector<std::pair<uint, uint>>>& result_relation();
 
     bool query_end();
+
+    bool zero_result();
 };
 
 #endif  // QUERY_EXECUTOR_HPP

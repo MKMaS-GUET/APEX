@@ -167,7 +167,7 @@ void QueryExecutor::Query() {
         executors_.push_back(executor);
         executor->Query();
         uint count = executor->ResultSize();
-        if (executor->zero_result() || count == 0) {
+        if (count == 0) {
             zero_result_ = true;
             return;
         }
@@ -184,7 +184,7 @@ void QueryExecutor::Train(UDPService& service) {
         std::cout << "-------------------------------------" << std::endl;
         SubQueryExecutor base_executor = SubQueryExecutor(index_, sub_query, limit, false);
         SubQueryExecutor leaner_executor = SubQueryExecutor(index_, sub_query, limit, true);
-        if (leaner_executor.zero_result())
+        if (leaner_executor.ResultSize() == 0)
             continue;
 
         service.sendMessage("start");
@@ -251,12 +251,8 @@ void QueryExecutor::Test(UDPService& service) {
             std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
         }
         service.sendMessage("end");
-        if (!executor->zero_result()) {
+        if (!executor->query_end())
             executor->PostProcess();
-        } else {
-            zero_result_ = true;
-            return;
-        }
 
         uint count = executor->ResultSize();
         if (count == 0) {
