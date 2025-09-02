@@ -132,7 +132,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
     // 获取每个子查询包含的变量
     sub_query_vars_.reserve(sub_queries_.size());
     for (const auto& sub_query : sub_queries_) {
-        // std::cout << "----------------" << std::endl;
+        std::cout << "----------------" << std::endl;
 
         std::set<std::string> vars_set;
 
@@ -140,7 +140,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
             const auto& s = triple_pattern.subject;
             const auto& p = triple_pattern.predicate;
             const auto& o = triple_pattern.object;
-            // std::cout << s.value << " " << p.value << " " << o.value << std::endl;
+            std::cout << s.value << " " << p.value << " " << o.value << std::endl;
 
             if (s.IsVariable())
                 vars_set.insert(s.value);
@@ -152,7 +152,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
 
         sub_query_vars_.emplace_back(vars_set.begin(), vars_set.end());
     }
-    // std::cout << "----------------" << std::endl;
+    std::cout << "----------------" << std::endl;
 }
 
 QueryExecutor::~QueryExecutor() {
@@ -184,75 +184,94 @@ void QueryExecutor::Train(UDPService& service) {
         std::cout << "-------------------------------------" << std::endl;
         SubQueryExecutor base_executor = SubQueryExecutor(index_, sub_query, limit, false);
         SubQueryExecutor leaner_executor = SubQueryExecutor(index_, sub_query, limit, true);
-        if (leaner_executor.ResultSize() == 0)
+        if (base_executor.query_end()) {
+            zero_result_ = true;
             continue;
-
-        service.sendMessage("start");
+        }
 
         double plan_time = 0;
         std::chrono::duration<double, std::milli> time;
         double base_exec_time = 0;
         double leaner_exec_time = 0;
-        while (!base_executor.query_end() && !leaner_executor.query_end()) {
-            std::cout << "-------------------------------------" << std::endl;
-            auto start = std::chrono::high_resolution_clock::now();
-            std::string base_next_variable = base_executor.NextVarieble();
-            int base_result_len = base_executor.ProcessNextVariable(base_next_variable);
-            time = std::chrono::high_resolution_clock::now() - start;
-            base_exec_time = time.count();
-            std::cout << "Base Processing " << base_next_variable << " takes: " << base_exec_time << " ms" << std::endl;
+        while (!base_executor.ordering_complete() && !leaner_executor.ordering_complete()) {
+            if (base_executor.UpdateFirstVariableRange())
+                break;
+            if (leaner_executor.UpdateFirstVariableRange())
+                break;
 
-            service.sendMessage(leaner_executor.query_graph());
+            service.sendMessage("start");
+            while (!base_executor.query_end() && !leaner_executor.query_end()) {
+                std::cout << "-------------------------------------" << std::endl;
+                auto start = std::chrono::high_resolution_clock::now();
+                std::string base_next_variable = base_executor.NextVarieble();
+                int base_result_len = base_executor.ProcessNextVariable(base_next_variable);
+                time = std::chrono::high_resolution_clock::now() - start;
+                base_exec_time = time.count();
+                std::cout << "Base Processing " << base_next_variable << " takes: " << base_exec_time << " ms"
+                          << std::endl;
 
-            start = std::chrono::high_resolution_clock::now();
-            std::string next_variable = service.receiveMessage();
-            time = std::chrono::high_resolution_clock::now() - start;
-            plan_time += time.count();
+                service.sendMessage(leaner_executor.query_graph());
 
-            start = std::chrono::high_resolution_clock::now();
-            int leaner_result_len = leaner_executor.ProcessNextVariable(next_variable);
-            time = std::chrono::high_resolution_clock::now() - start;
-            leaner_exec_time = time.count();
-            std::cout << "Leaner Processing " << next_variable << " takes: " << leaner_exec_time << " ms" << std::endl;
+                start = std::chrono::high_resolution_clock::now();
+                std::string next_variable = service.receiveMessage();
+                time = std::chrono::high_resolution_clock::now() - start;
+                plan_time += time.count();
 
-            std::ostringstream reward_stream;
-            reward_stream << "[" << (base_result_len - leaner_result_len) << "," << (base_exec_time - leaner_exec_time)
-                          << "]";
-            service.sendMessage(reward_stream.str());
+                start = std::chrono::high_resolution_clock::now();
+                int leaner_result_len = leaner_executor.ProcessNextVariable(next_variable);
+                time = std::chrono::high_resolution_clock::now() - start;
+                leaner_exec_time = time.count();
+                std::cout << "Leaner Processing " << next_variable << " takes: " << leaner_exec_time << " ms"
+                          << std::endl;
+
+                std::ostringstream reward_stream;
+                reward_stream << "[" << (base_result_len - leaner_result_len) << ","
+                              << (base_exec_time - leaner_exec_time) << "]";
+                service.sendMessage(reward_stream.str());
+            }
+            base_executor.Reset();
+            leaner_executor.Reset();
+            service.sendMessage("end");
+
+            std::cout << "gen plan takes " << plan_time << " ms." << std::endl;
+            std::cout << "base execute takes " << base_executor.execute_cost() << " ms." << std::endl;
+            std::cout << "leaner execute takes " << leaner_executor.execute_cost() << " ms." << std::endl;
         }
-        service.sendMessage("end");
-
-        std::cout << "gen plan takes " << plan_time << " ms." << std::endl;
-        std::cout << "base execute takes " << base_executor.execute_cost() << " ms." << std::endl;
-        std::cout << "leaner execute takes " << leaner_executor.execute_cost() << " ms." << std::endl;
     }
 }
 
 void QueryExecutor::Test(UDPService& service) {
     uint total_limit = parser_.Limit();
     for (auto& sub_query : sub_queries_) {
-        service.sendMessage("start");
-
         auto executor = new SubQueryExecutor(index_, sub_query, total_limit, true);
         executors_.push_back(executor);
+        if (executor->query_end()) {
+            zero_result_ = true;
+            continue;
+        }
 
         std::chrono::duration<double, std::milli> time;
-        while (!executor->query_end()) {
-            service.sendMessage(executor->query_graph());
+        while (!executor->ordering_complete()) {
+            if (executor->UpdateFirstVariableRange())
+                break;
+            service.sendMessage("start");
+            while (!executor->query_end()) {
+                service.sendMessage(executor->query_graph());
 
-            auto start = std::chrono::high_resolution_clock::now();
-            std::string next_variable = service.receiveMessage();
-            time = std::chrono::high_resolution_clock::now() - start;
-            gen_plan_cost_ += time.count();
+                auto start = std::chrono::high_resolution_clock::now();
+                std::string next_variable = service.receiveMessage();
+                time = std::chrono::high_resolution_clock::now() - start;
+                gen_plan_cost_ += time.count();
 
-            start = std::chrono::high_resolution_clock::now();
-            executor->ProcessNextVariable(next_variable);
-            time = std::chrono::high_resolution_clock::now() - start;
-            std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+                start = std::chrono::high_resolution_clock::now();
+                executor->ProcessNextVariable(next_variable);
+                time = std::chrono::high_resolution_clock::now() - start;
+                std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+            }
+            executor->Reset();
+            service.sendMessage("end");
         }
-        service.sendMessage("end");
-        if (!executor->query_end())
-            executor->PostProcess();
+        executor->PostProcess();
 
         uint count = executor->ResultSize();
         if (count == 0) {

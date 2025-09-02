@@ -19,7 +19,7 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
     value_loss_coef = 1.0
 
     # --- 1. Rollout 收集数据 ---
-    states, actions, rewards_raw, log_probs, values = [], [], [[], []], [], []
+    states, actions, rewards_raw, log_probs, values = [], [], [[], [], []], [], []
 
     msg = service.receive_message()
     if msg != "start":
@@ -39,16 +39,20 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
             action_logits, value = model(query_graph)
 
             # 候选节点掩码
-            candidate_indices = [
-                i for i, s in enumerate(query_graph["status"]) if s == 1
-            ]
-            if not candidate_indices:
-                candidate_indices = [
-                    i for i, s in enumerate(query_graph["status"]) if s == 0
-                ]
+            valid_indices = [i for i, s in enumerate(query_graph["status"]) if s == 1]
+            invalid_indices = [i for i, s in enumerate(query_graph["status"]) if s == 0]
+            if len(valid_indices):
+                candidate_indices = valid_indices
+            else:
+                candidate_indices = invalid_indices
 
             candidate_logits = action_logits[candidate_indices]
             dist = Categorical(logits=candidate_logits)
+
+            best_candidate_idx = int(torch.argmax(candidate_logits).item())
+            validate_reward = -0.5
+            if best_candidate_idx in valid_indices:
+                validate_reward = 0.4
 
             action_rel = dist.sample()
             action_idx = candidate_indices[action_rel.item()]
@@ -64,11 +68,12 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
         actions.append(torch.tensor(action_idx, device=device))
         rewards_raw[0].append(reward_tuple[0])
         rewards_raw[1].append(reward_tuple[1])
+        rewards_raw[2].append(validate_reward)
         log_probs.append(log_prob)
         values.append(value.squeeze(-1))  # 保证是 [ ]
 
         step_count += 1
-        logger.info(f"Selected vertex {selected_vertex}, Reward: {reward_tuple}")
+        logger.info(f"Selected vertex {selected_vertex}, Reward: {reward_tuple, validate_reward}")
 
     if not states:
         logger.warning("No data collected in this episode.")
@@ -81,12 +86,14 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
 
     time_rew = torch.tensor(rewards_raw[1], dtype=torch.float32, device=device)
     time_rew = torch.where(
-        torch.abs(time_rew) < 10, torch.tensor(1.0, device=device), time_rew
+        torch.abs(time_rew) < 1, torch.tensor(1.0, device=device), time_rew
     )
     time_reward_rms.update(time_rew)
     norm_time = time_reward_rms.normalize(time_rew)
 
-    rewards = (0.4 * norm_len + 0.6 * norm_time).tolist()
+    validate_rew = torch.tensor(rewards_raw[2], dtype=torch.float32, device=device)
+
+    rewards = (0.4 * norm_len + 0.4 * norm_time + 0.2 * validate_rew).tolist()
 
     # --- 3. 计算 Advantage (GAE) 和 Returns (MC) ---
     values = torch.stack(values).to(device)  # [T]
@@ -130,26 +137,25 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
         for i in range(len(states)):
             action_logits, value = model(states[i])
 
-            # 候选掩码（和 rollout 一致）
-            candidate_indices = [j for j, s in enumerate(states[i]["status"]) if s == 1]
-            if not candidate_indices:
-                candidate_indices = [
-                    j for j, s in enumerate(states[i]["status"]) if s == 0
-                ]
+            valid_indices = [i for i, s in enumerate(states[i]["status"]) if s == 1]
+            invalid_indices = [i for i, s in enumerate(states[i]["status"]) if s == 0]
+            if len(valid_indices):
+                candidate_indices = valid_indices
+            else:
+                candidate_indices = invalid_indices
 
             candidate_logits = action_logits[candidate_indices]
             dist = Categorical(logits=candidate_logits)
 
             # 找到动作在候选集里的相对 index
-            action_global = actions[i].item()
-            if action_global in candidate_indices:
-                rel_idx = candidate_indices.index(action_global)
-                rel_idx = torch.tensor(rel_idx, device=device)
+            pre_action = actions[i].item()
+            if pre_action in candidate_indices:
+                act_idx = candidate_indices.index(pre_action)
+                act_idx = torch.tensor(act_idx, device=device)
             else:
-                # 如果 rollout 时选的动作不在候选集（理论上不会发生）
-                rel_idx = torch.tensor(0, device=device)
+                act_idx = torch.tensor(0, device=device)
 
-            new_log_probs.append(dist.log_prob(rel_idx))
+            new_log_probs.append(dist.log_prob(act_idx))
             new_values.append(value.squeeze(-1))
             entropies.append(dist.entropy())
 
@@ -270,7 +276,7 @@ critic_params = list(model.critic.parameters())
 optimizer = torch.optim.Adam(
     [
         {"params": actor_params, "lr": 1e-4},
-        {"params": critic_params, "lr": 1e-4},
+        {"params": critic_params, "lr": 1e-4}, # wgpb 1e-5
     ]
 )
 

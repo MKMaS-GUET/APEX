@@ -17,7 +17,6 @@ using Position = SPARQLParser::Term::Position;
 class SubQueryExecutor {
    private:
     bool zero_result_;
-
     uint variable_id_;
 
     std::shared_ptr<IndexRetriever> index_;
@@ -36,15 +35,13 @@ class SubQueryExecutor {
     std::pair<uint, uint> first_variable_range_;
     uint first_variable_result_len_;
 
-    bool ordering_complete_flag_;
+    bool ordering_complete_;
+    bool use_order_generator_;
 
     std::chrono::duration<double, std::milli> execute_cost_;
-
     std::chrono::duration<double, std::milli> build_group_cost_;
 
     void UpdateStatus(std::string variable, uint result_len);
-
-    bool UpdateFirstVariableRange();
 
     std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
@@ -78,6 +75,8 @@ class SubQueryExecutor {
 
     std::pair<ResultGenerator::iterator, ResultGenerator::iterator> ResultsIter();
 
+    bool UpdateFirstVariableRange();
+
     uint ResultSize();
 
     double preprocess_cost();
@@ -100,7 +99,7 @@ class SubQueryExecutor {
 
     bool query_end();
 
-    bool zero_result();
+    bool ordering_complete();
 };
 
 #endif  // QUERY_EXECUTOR_HPP

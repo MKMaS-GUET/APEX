@@ -10,7 +10,8 @@ SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
                                    bool use_order_generator)
     : index_(index), pre_processor_(index, triple_partterns, use_order_generator) {
     zero_result_ = false;
-    ordering_complete_flag_ = false;
+    ordering_complete_ = false;
+    use_order_generator_ = use_order_generator;
     variable_id_ = 0;
     first_variable_result_len_ = __UINT32_MAX__;
     result_generator_ = nullptr;
@@ -34,10 +35,6 @@ SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
 std::string SubQueryExecutor::NextVarieble() {
     if (remaining_variables_.empty())
         return "";
-
-    if (variable_id_ < variable_order_.size()) {
-        return variable_order_[variable_id_];
-    }
 
     phmap::flat_hash_map<std::string, uint> var_cnt;
     std::vector<std::string> candidate_variable;
@@ -64,9 +61,9 @@ std::string SubQueryExecutor::NextVarieble() {
               [&](std::string a, std::string b) { return var_cnt[a] > var_cnt[b]; });
 
     std::string next_variable = candidate_variable.front();
-    // std::vector<std::string> test = {"?x7", "?x2", "?x1", "?x8", "?x4", "?x3", "?x9", "?x10", "?x5", "?x6"};
+
+    // std::vector<std::string> test = {"?v3", "?v8", "?v4", "?v5", "?v6", "?v7", "?v0", "?v1", "?v9"};
     // next_variable = test[variable_id_];
-    variable_order_.push_back(next_variable);
 
     return next_variable;
 }
@@ -441,7 +438,7 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
     std::vector<uint> key_offsets_map;
     for (auto var : vars) {
         if (var->is_none) {
-            if (!ordering_complete_flag_)
+            if (!ordering_complete_)
                 result_relation_[var->connection->var_id].emplace_back(variable_id_, none_cnt);
             none_cnt++;
         }
@@ -493,13 +490,13 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
                 else
                     batch_size_ = first_variable_result_len_ / 2;
             } else
-                batch_size_ = first_variable_result_len_;
+                batch_size_ = 20000;
             first_variable_range_ = {0, batch_size_};
         }
     }
 
     if (variable_id_ == pre_processor_.VariableCount() - 1)
-        ordering_complete_flag_ = true;
+        ordering_complete_ = true;
 
     if (pre_processor_.use_order_generator())
         pre_processor_.UpdateQueryGraph(variable, result_len);
@@ -512,7 +509,9 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
     auto begin = std::chrono::high_resolution_clock::now();
 
     std::vector<Variable*> next_vars;
-    if (!ordering_complete_flag_) {
+    if (!ordering_complete_) {
+        variable_order_.push_back(variable);
+
         for (auto& var : *pre_processor_.VarsOf(variable))
             next_vars.push_back(&var);
         plan_.push_back({variable, next_vars});
@@ -555,47 +554,67 @@ bool SubQueryExecutor::UpdateFirstVariableRange() {
 }
 
 void SubQueryExecutor::Reset() {
-    for (size_t i = 1; i < result_map_.size(); ++i)
-        result_map_[i].clear();
-    variable_id_ = 1;
-    zero_result_ = false;
+    if (!ordering_complete_) {
+        for (size_t i = 1; i < result_map_.size(); ++i)
+            result_map_[i].clear();
+        variable_id_ = 1;
+        zero_result_ = false;
+
+        if (variable_order_.size() > 1) {
+            remaining_variables_.insert(variable_order_.begin() + 1, variable_order_.end());
+            variable_order_.erase(variable_order_.begin() + 1, variable_order_.end());
+        }
+        for (uint v_id = 1; v_id < plan_.size(); v_id++) {
+            for (auto& var : plan_[v_id].second) {
+                var->var_id = -1;
+                if (var->connection && var->connection->is_none == true)
+                    var->connection->is_none = false;
+            }
+        }
+        if (plan_.size() > 1)
+            plan_.erase(plan_.begin() + 1, plan_.end());
+        for (auto& rel : result_relation_)
+            rel.clear();
+
+        if (use_order_generator_)
+            pre_processor_.ResetQueryGraph();
+    }
 }
 
 void SubQueryExecutor::Query() {
     if (zero_result_)
         return;
 
-    while (!ordering_complete_flag_) {
+    while (!ordering_complete()) {
         // std::cout << "-------------------------------" << std::endl;
         if (UpdateFirstVariableRange())
             break;
 
         while (!query_end()) {
             std::string next_variable = NextVarieble();
+
             // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(next_variable);
             // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
             // std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
-            //   << std::endl;
+            //           << std::endl;
         }
-        if (!ordering_complete_flag_) {
-            Reset();
-            if (plan_.size() > 1)
-                plan_.erase(plan_.begin() + 1, plan_.end());
-            for (auto& rel : result_relation_)
-                rel.clear();
-        }
+        Reset();
     }
-    result_generator_ = new ResultGenerator(result_relation_, result_limit_);
-    if (result_generator_->Update(result_map_, first_variable_range_))
-        return;
-    Reset();
+
     PostProcess();
 }
 
 void SubQueryExecutor::PostProcess() {
+    result_generator_ = new ResultGenerator(result_relation_, result_limit_);
+    if (result_generator_->Update(result_map_, first_variable_range_))
+        return;
     while (true) {
         // std::cout << "-------------------------------" << std::endl;
+        for (size_t i = 1; i < result_map_.size(); ++i)
+            result_map_[i].clear();
+        variable_id_ = 1;
+        zero_result_ = false;
         if (UpdateFirstVariableRange())
             break;
         for (uint id = 1; id < variable_order_.size(); id++) {
@@ -604,13 +623,12 @@ void SubQueryExecutor::PostProcess() {
             // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
             // std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " << time.count()
             //           << " ms" << std::endl;
-            if (zero_result())
+            if (zero_result_)
                 break;
         }
         if (variable_id_ == variable_order_.size())
             if (result_generator_->Update(result_map_, first_variable_range_))
                 break;
-        Reset();
     }
 }
 
@@ -714,9 +732,9 @@ std::vector<std::vector<std::pair<uint, uint>>>& SubQueryExecutor::result_relati
 }
 
 bool SubQueryExecutor::query_end() {
-    return zero_result_ || ordering_complete_flag_;
+    return zero_result_ || ordering_complete_;
 }
 
-bool SubQueryExecutor::zero_result() {
-    return zero_result_;
+bool SubQueryExecutor::ordering_complete() {
+    return ordering_complete_;
 }

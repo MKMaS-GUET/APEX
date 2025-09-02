@@ -172,6 +172,10 @@ std::vector<std::pair<uint, Position>> PreProcessor::MappingVariable(const std::
     return ret;
 }
 
+void PreProcessor::ResetQueryGraph() {
+    query_graph_.Reset();
+}
+
 std::list<Variable>* PreProcessor::VarsOf(std::string variable) {
     return &str2var_[variable];
 }

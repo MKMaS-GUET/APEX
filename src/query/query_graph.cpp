@@ -30,7 +30,7 @@ void QueryGraph::Init() {
     std::vector<std::pair<std::string, uint>> var_degree_pairs;
     for (auto& [v, id] : vertexes_) {
         uint degree = vertex_degree_[id];
-        if (degree > 1) 
+        if (degree > 1)
             var_degree_pairs.emplace_back(v, degree);
     }
 
@@ -38,10 +38,30 @@ void QueryGraph::Init() {
               [](const auto& a, const auto& b) { return a.second > b.second; });
 
     uint topk = 1;
-    for (size_t i = 0; i < std::min<size_t>(topk, var_degree_pairs.size()); ++i) {
+    uint k = 0;
+    uint pre_degree = 0;
+    for (size_t i = 0; i < var_degree_pairs.size(); ++i) {
         std::string candidate = var_degree_pairs[i].first;
-        vertex_status_[vertexes_[candidate]] = 1;
+        uint degree = var_degree_pairs[i].second;
+
+        if (degree != pre_degree) {
+            k++;
+            pre_degree = degree;
+        }
+
+        if (k <= topk)
+            vertex_status_[vertexes_[candidate]] = 1;
+        else
+            break;
     }
+
+    is_first_variable_ = true;
+}
+
+void QueryGraph::Reset() {
+    est_size_ = init_status.est_size;
+    est_size_updated_ = init_status.est_size_updated;
+    vertex_status_ = init_status.vertex_status;
 }
 
 void QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
@@ -88,6 +108,13 @@ void QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
                 }
             }
         }
+    }
+
+    if (is_first_variable_) {
+        init_status.est_size = est_size_;
+        init_status.est_size_updated = est_size_updated_;
+        init_status.vertex_status = vertex_status_;
+        is_first_variable_ = false;
     }
 }
 

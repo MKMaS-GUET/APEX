@@ -37,6 +37,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
         }
 
         std::ios::sync_with_stdio(false);
+        std::chrono::duration<double, std::milli> query_time;
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
             std::string sparql = sparqls[i];
 
@@ -52,9 +53,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
             executor.Query();
             uint result_count = executor.PrintResult();
 
-            std::chrono::duration<double, std::milli> query_time =
-                std::chrono::high_resolution_clock::now() - query_start;
-
+            query_time = std::chrono::high_resolution_clock::now() - query_start;
             std::cout << result_count << " result(s)." << std::endl;
             // std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;

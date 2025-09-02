@@ -214,15 +214,15 @@ class GraphActorCritic(nn.Module):
         # Actor输出
         action_logits = self.actor(combined_features).squeeze(-1)  # [num_nodes]
 
-        # 屏蔽不可选择的节点（status != 1）
-        status = torch.tensor(
-            query_graph["status"], dtype=torch.float32, device=self.device
-        )
-        mask = (status == 1).float()
-        if mask.sum() == 0:
-            mask = (status == 0).float()
+        # # 屏蔽不可选择的节点（status != 1）
+        # status = torch.tensor(
+        #     query_graph["status"], dtype=torch.float32, device=self.device
+        # )
+        # mask = (status == 1).float()
+        # if mask.sum() == 0:
+        #     mask = (status == 0).float()
 
-        action_logits = action_logits * mask + (1 - mask) * (-1e9)
+        # action_logits = action_logits * mask + (1 - mask) * (-1e9)
 
         # Critic输出
         pooled_features = torch.mean(combined_features, dim=0)  # [hidden_dim * 2]

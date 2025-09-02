@@ -37,6 +37,8 @@ class PreProcessor {
 
     void UpdateQueryGraph(std::string variable, uint cur_est_size);
 
+    void ResetQueryGraph();
+
     std::string query_graph();
 
     bool use_order_generator();
