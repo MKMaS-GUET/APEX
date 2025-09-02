@@ -493,7 +493,7 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
                 else
                     batch_size_ = first_variable_result_len_ / 2;
             } else
-                batch_size_ = 20000;
+                batch_size_ = first_variable_result_len_;
             first_variable_range_ = {0, batch_size_};
         }
     }
@@ -566,7 +566,7 @@ void SubQueryExecutor::Query() {
         return;
 
     while (!ordering_complete_flag_) {
-        std::cout << "-------------------------------" << std::endl;
+        // std::cout << "-------------------------------" << std::endl;
         if (UpdateFirstVariableRange())
             break;
 
@@ -576,7 +576,7 @@ void SubQueryExecutor::Query() {
             ProcessNextVariable(next_variable);
             // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
             // std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
-            //           << std::endl;
+            //   << std::endl;
         }
         if (!ordering_complete_flag_) {
             Reset();
@@ -598,7 +598,6 @@ void SubQueryExecutor::PostProcess() {
         // std::cout << "-------------------------------" << std::endl;
         if (UpdateFirstVariableRange())
             break;
-
         for (uint id = 1; id < variable_order_.size(); id++) {
             // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(variable_order_[id]);
@@ -608,8 +607,9 @@ void SubQueryExecutor::PostProcess() {
             if (zero_result())
                 break;
         }
-        if (result_generator_->Update(result_map_, first_variable_range_))
-            break;
+        if (variable_id_ == variable_order_.size())
+            if (result_generator_->Update(result_map_, first_variable_range_))
+                break;
         Reset();
     }
 }

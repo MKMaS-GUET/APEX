@@ -15,7 +15,7 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
 
     for (auto& map : result_map) {
         if (map.size() == 0)
-            return count_->load() < limit_ || limit_ == __UINT32_MAX__;
+            return count_->load() > limit_ && limit_ != __UINT32_MAX__;
         result_map_p.push_back(&map);
     }
 
