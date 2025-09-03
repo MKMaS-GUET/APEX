@@ -29,8 +29,8 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
     if (total_range > first_map_size)
         total_range = first_map_size;
 
-    uint num_threads = std::min(static_cast<uint>(total_range / 512), static_cast<uint>(16));
-    // std::cout << total_range << " " << num_threads << std::endl;
+    uint num_threads = std::min(static_cast<uint>(total_range / 128), static_cast<uint>(16));
+    // std::cout << first_map_size << " " << total_range << " " << num_threads << std::endl;
     if (num_threads == 0) {
         ResultMapIterator iter = ResultMapIterator(result_map_p, result_relation_, first_variable_range);
         std::vector<std::vector<uint>>* results = new std::vector<std::vector<uint>>();

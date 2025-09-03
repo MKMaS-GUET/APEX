@@ -62,7 +62,7 @@ std::string SubQueryExecutor::NextVarieble() {
 
     std::string next_variable = candidate_variable.front();
 
-    // std::vector<std::string> test = {"?v3", "?v8", "?v4", "?v5", "?v6", "?v7", "?v0", "?v1", "?v9"};
+    // std::vector<std::string> test = {"?x3", "?x4", "?x2", "?x1"};
     // next_variable = test[variable_id_];
 
     return next_variable;
@@ -221,6 +221,7 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
 
     uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(16));
     // num_threads = 1;
+    // std::cout << max_join_cnt << " " << num_threads << std::endl;
     if (num_threads <= 1) {
         uint result_len = joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
         return result_len;
@@ -268,9 +269,15 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
 }
 
 uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap& result) {
-    std::vector<std::span<uint>> lists;
-    for (auto& var : vars)
-        lists.push_back(var->PreRetrieve());
+    // auto begin = std::chrono::high_resolution_clock::now();
+    std::vector<std::span<uint>> lists(vars.size());
+    std::vector<std::thread> retrieve_threads;
+    for (size_t i = 0; i < vars.size(); ++i)
+        retrieve_threads.emplace_back([&, i]() { lists[i] = vars[i]->PreRetrieve(); });
+    for (auto& th : retrieve_threads) {
+        if (th.joinable())
+            th.join();
+    }
 
     if (lists.size() == 1) {
         std::vector<uint>* final_result = new std::vector<uint>();
@@ -330,6 +337,9 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
         final_result->insert(final_result->end(), part.begin(), part.end());
 
     result.emplace(std::vector<uint>(vars.size(), 0), final_result);
+
+    // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
+    // std::cout << variable_id_ << " takes: " << time.count() << " ms" << std::endl;
 
     return final_result->size();
 }
@@ -483,7 +493,7 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
 
     if (variable_id_ == 0) {
         first_variable_result_len_ = result_len;
-        if (result_limit_ != __INT32_MAX__) {
+        if (result_limit_ != __UINT32_MAX__) {
             if (first_variable_result_len_ < 20000) {
                 if (first_variable_result_len_ < 2)
                     batch_size_ = first_variable_result_len_;
@@ -491,8 +501,10 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
                     batch_size_ = first_variable_result_len_ / 2;
             } else
                 batch_size_ = 20000;
-            first_variable_range_ = {0, batch_size_};
+        } else {
+            batch_size_ = first_variable_result_len_;
         }
+        first_variable_range_ = {0, batch_size_};
     }
 
     if (variable_id_ == pre_processor_.VariableCount() - 1)
@@ -592,7 +604,6 @@ void SubQueryExecutor::Query() {
 
         while (!query_end()) {
             std::string next_variable = NextVarieble();
-
             // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(next_variable);
             // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;

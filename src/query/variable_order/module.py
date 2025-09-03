@@ -89,17 +89,15 @@ class GraphActorCritic(nn.Module):
                 query_graph["est_size"], dtype=torch.float32, device=self.device
             )
         )
-
+        degree = normalize(
+            torch.tensor(query_graph["degree"], dtype=torch.float32, device=self.device)
+        )
+        # print("est_size: ", est_size)
+        # print("degree: ", degree)
         # 计算总度数
         edges = query_graph["edges"]
         num_nodes = len(query_graph["vertices"])
-        in_degree = torch.zeros(num_nodes, device=self.device)
-        out_degree = torch.zeros(num_nodes, device=self.device)
-        for edge in edges:
-            out_degree[edge[0]] += 1
-            in_degree[edge[1]] += 1
 
-        total_degree = in_degree + out_degree
         neighbor_stats = torch.zeros(num_nodes, 3, device=self.device)
         status_int = status.int()
 
@@ -171,7 +169,7 @@ class GraphActorCritic(nn.Module):
             [
                 # status,
                 est_size,
-                total_degree,
+                degree,
                 neighbor_stats[:, 0],
                 neighbor_stats[:, 1],
                 neighbor_stats[:, 2],
@@ -213,16 +211,6 @@ class GraphActorCritic(nn.Module):
 
         # Actor输出
         action_logits = self.actor(combined_features).squeeze(-1)  # [num_nodes]
-
-        # # 屏蔽不可选择的节点（status != 1）
-        # status = torch.tensor(
-        #     query_graph["status"], dtype=torch.float32, device=self.device
-        # )
-        # mask = (status == 1).float()
-        # if mask.sum() == 0:
-        #     mask = (status == 0).float()
-
-        # action_logits = action_logits * mask + (1 - mask) * (-1e9)
 
         # Critic输出
         pooled_features = torch.mean(combined_features, dim=0)  # [hidden_dim * 2]

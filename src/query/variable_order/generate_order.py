@@ -32,7 +32,7 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
             break
 
         query_graph = json.loads(msg)
-        # logger.info(f"Step {step_count} query graph: {query_graph}")
+        logger.info(f"Step {step_count} query graph: {query_graph}")
 
         # --- 模型前向 (不需要梯度) ---
         with torch.no_grad():
@@ -73,7 +73,9 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
         values.append(value.squeeze(-1))  # 保证是 [ ]
 
         step_count += 1
-        logger.info(f"Selected vertex {selected_vertex}, Reward: {reward_tuple, validate_reward}")
+        logger.info(
+            f"Selected vertex {selected_vertex}, Reward: {reward_tuple, validate_reward}"
+        )
 
     if not states:
         logger.warning("No data collected in this episode.")
@@ -275,8 +277,8 @@ critic_params = list(model.critic.parameters())
 
 optimizer = torch.optim.Adam(
     [
-        {"params": actor_params, "lr": 1e-4},
-        {"params": critic_params, "lr": 1e-4}, # wgpb 1e-5
+        {"params": actor_params, "lr": 1e-3},
+        {"params": critic_params, "lr": 1e-3},
     ]
 )
 

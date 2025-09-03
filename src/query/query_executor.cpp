@@ -132,7 +132,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
     // 获取每个子查询包含的变量
     sub_query_vars_.reserve(sub_queries_.size());
     for (const auto& sub_query : sub_queries_) {
-        std::cout << "----------------" << std::endl;
+        // std::cout << "----------------" << std::endl;
 
         std::set<std::string> vars_set;
 
@@ -140,7 +140,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
             const auto& s = triple_pattern.subject;
             const auto& p = triple_pattern.predicate;
             const auto& o = triple_pattern.object;
-            std::cout << s.value << " " << p.value << " " << o.value << std::endl;
+            // std::cout << s.value << " " << p.value << " " << o.value << std::endl;
 
             if (s.IsVariable())
                 vars_set.insert(s.value);
@@ -152,7 +152,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
 
         sub_query_vars_.emplace_back(vars_set.begin(), vars_set.end());
     }
-    std::cout << "----------------" << std::endl;
+    // std::cout << "----------------" << std::endl;
 }
 
 QueryExecutor::~QueryExecutor() {
@@ -256,17 +256,16 @@ void QueryExecutor::Test(UDPService& service) {
                 break;
             service.sendMessage("start");
             while (!executor->query_end()) {
-                service.sendMessage(executor->query_graph());
-
                 auto start = std::chrono::high_resolution_clock::now();
+                service.sendMessage(executor->query_graph());
                 std::string next_variable = service.receiveMessage();
                 time = std::chrono::high_resolution_clock::now() - start;
                 gen_plan_cost_ += time.count();
 
-                start = std::chrono::high_resolution_clock::now();
+                // start = std::chrono::high_resolution_clock::now();
                 executor->ProcessNextVariable(next_variable);
-                time = std::chrono::high_resolution_clock::now() - start;
-                std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+                // time = std::chrono::high_resolution_clock::now() - start;
+                // std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
             }
             executor->Reset();
             service.sendMessage("end");

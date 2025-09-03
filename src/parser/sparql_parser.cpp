@@ -344,12 +344,12 @@ SPARQLParser::Term SPARQLParser::MakeFunctionLiteral(std::string literal) {
 }
 
 SPARQLParser::SPARQLParser(const SPARQLLexer& sparql_lexer)
-    : limit_(UINTMAX_MAX), sparql_lexer_(sparql_lexer), project_modifier_(ProjectModifier::Type::None) {
+    : limit_(__UINT32_MAX__), sparql_lexer_(sparql_lexer), project_modifier_(ProjectModifier::Type::None) {
     parse();
 }
 
 SPARQLParser::SPARQLParser(std::string input_string)
-    : limit_(UINTMAX_MAX),
+    : limit_(__UINT32_MAX__),
       sparql_lexer_(SPARQLLexer(std::move(input_string))),
       project_modifier_(ProjectModifier::Type::None) {
     parse();
