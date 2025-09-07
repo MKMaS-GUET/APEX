@@ -262,10 +262,10 @@ void QueryExecutor::Test(UDPService& service) {
                 time = std::chrono::high_resolution_clock::now() - start;
                 gen_plan_cost_ += time.count();
 
-                // start = std::chrono::high_resolution_clock::now();
+                start = std::chrono::high_resolution_clock::now();
                 executor->ProcessNextVariable(next_variable);
-                // time = std::chrono::high_resolution_clock::now() - start;
-                // std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
+                time = std::chrono::high_resolution_clock::now() - start;
+                std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;
             }
             executor->Reset();
             service.sendMessage("end");

@@ -28,8 +28,10 @@ void PredicateIndex::Index::BuildMap() {
 
 PredicateIndex::PredicateIndex() {}
 
-PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id)
+PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id, bool in_memory)
     : file_path_(file_path), max_predicate_id_(max_predicate_id) {
+    in_memory_ = in_memory;
+
     predicate_index_mmap_ = MMap<uint>(file_path_ + "predicate_index");
 
     std::string index_path = file_path_ + "predicate_index_arrays";
@@ -50,12 +52,19 @@ PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id)
     std::sort(s_sizes.begin(), s_sizes.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
     std::sort(o_sizes.begin(), o_sizes.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
 
-    uint cnt = 0;
-    for (auto rit = s_sizes.rbegin(); rit != s_sizes.rend() && cnt < 5; ++rit, cnt++)
-        GetSSet(rit->second);
-    cnt = 0;
-    for (auto rit = o_sizes.rbegin(); rit != o_sizes.rend() && cnt < 5; ++rit, cnt++)
-        GetOSet(rit->second);
+    if (!in_memory_) {
+        uint cnt = 0;
+        for (auto rit = s_sizes.rbegin(); rit != s_sizes.rend() && cnt < 5; ++rit, cnt++)
+            GetSSet(rit->second);
+        cnt = 0;
+        for (auto rit = o_sizes.rbegin(); rit != o_sizes.rend() && cnt < 5; ++rit, cnt++)
+            GetOSet(rit->second);
+    } else {
+        for (auto rit = s_sizes.rbegin(); rit != s_sizes.rend(); ++rit)
+            GetSSet(rit->second);
+        for (auto rit = o_sizes.rbegin(); rit != o_sizes.rend(); ++rit)
+            GetOSet(rit->second);
+    }
 }
 
 PredicateIndex::PredicateIndex(std::shared_ptr<phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>> pso,

@@ -13,11 +13,22 @@ inline uint popcount_byte(unsigned char byte) {
 }
 
 // 快速跳过零字节
-inline uint skip_zero_bytes(MMap<char>& bits, uint start_bit, uint end_bit) {
+inline uint skip_zero_bytes(MMap<char>* bits, uint start_bit, uint end_bit) {
     uint byte_idx = start_bit / 8;
     uint end_byte = end_bit / 8;
 
-    while (byte_idx <= end_byte && bits[byte_idx] == 0) {
+    while (byte_idx <= end_byte && bits->at(byte_idx) == 0) {
+        byte_idx++;
+    }
+
+    return byte_idx * 8;
+}
+
+inline uint skip_zero_bytes(char* bits_in_memory_, uint start_bit, uint end_bit) {
+    uint byte_idx = start_bit / 8;
+    uint end_byte = end_bit / 8;
+
+    while (byte_idx <= end_byte && bits_in_memory_[byte_idx] == 0) {
         byte_idx++;
     }
 
@@ -25,13 +36,18 @@ inline uint skip_zero_bytes(MMap<char>& bits, uint start_bit, uint end_bit) {
 }
 
 class One {
-    MMap<char>& bits_;
+    MMap<char>* bits_;
+    char* bits_in_memory_;
 
     uint bit_offset_;
     uint end_;
 
    public:
+    One() = default;
+
     One(MMap<char>& bits, uint begin, uint end);
+
+    One(char* bits_in_memory_, uint begin, uint end);
 
     // next one in [begin, end)
     uint Next();
@@ -40,7 +56,12 @@ class One {
 // ones in [begin, end)
 uint range_rank(MMap<char>& bits, uint begin, uint end);
 
+uint range_rank(char* bits_in_memory_, uint begin, uint end);
+
 uint AccessBitSequence(MMap<uint>& bits, ulong bit_start, uint data_width);
+
+uint AccessBitSequence(uint* bits, ulong bit_start, uint data_width);
+
 }  // namespace bitop
 
 #endif

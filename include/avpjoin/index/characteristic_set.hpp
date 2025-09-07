@@ -28,6 +28,8 @@ class CharacteristicSet {
     };
 
    private:
+    bool in_memory_ = true;
+
     std::string file_path_;
     uint base_;
     MMap<uint8_t> mmap_;
@@ -37,7 +39,7 @@ class CharacteristicSet {
    public:
     CharacteristicSet();
     CharacteristicSet(uint cnt);
-    CharacteristicSet(std::string file_path);
+    CharacteristicSet(std::string file_path, bool in_memory);
 
     void Load();
 

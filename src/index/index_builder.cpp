@@ -89,7 +89,7 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<uint>& c_set_id,
     std::vector<std::vector<uint>>().swap(predicate_sets);
 
     std::string file_name = (permutation == Permutation::kSPO) ? "s_c_sets" : "o_c_sets";
-    CharacteristicSet c_set = CharacteristicSet(db_index_path_ + file_name);
+    CharacteristicSet c_set = CharacteristicSet(db_index_path_ + file_name, false);
     c_set.Build(compressed_sets, original_size);
 }
 

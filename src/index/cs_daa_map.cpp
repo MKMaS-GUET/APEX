@@ -19,7 +19,8 @@ CsDaaMap::CsDaaMap(std::string file_path,
                    uint shared_cnt,
                    uint subject_cnt,
                    uint object_cnt,
-                   uint shared_id_size)
+                   uint shared_id_size,
+                   bool in_memory)
     : file_path_(file_path),
       cs_id_width_(cs_id_width),
       daa_offset_width_(daa_offset_width),
@@ -28,8 +29,16 @@ CsDaaMap::CsDaaMap(std::string file_path,
       shared_cnt_(shared_cnt),
       subject_cnt_(subject_cnt),
       object_cnt_(object_cnt),
-      shared_id_size_(shared_id_size) {
+      shared_id_size_(shared_id_size),
+      in_memory_(in_memory) {
     cs_daa_map_ = MMap<uint>(file_path_);
+    if (in_memory_) {
+        uint uint_cnt = cs_daa_map_.size_ + 3 / 4;
+        cs_daa_map_in_memory_ = new uint[uint_cnt];
+        for (uint i = 0; i < uint_cnt; i++)
+            cs_daa_map_in_memory_[i] = cs_daa_map_[i];
+    }
+
     shared_width_ = cs_id_width_.first + daa_offset_width_.first + cs_id_width_.second + daa_offset_width_.second;
     not_shared_width_ = not_shared_cs_id_width + not_shared_daa_offset_width;
 }
@@ -141,6 +150,8 @@ uint CsDaaMap::ChararisticSetIdOf(uint id, Permutation permutation) {
         access_width = not_shared_cs_id_width_;
     }
 
+    if (in_memory_)
+        return bitop::AccessBitSequence(cs_daa_map_in_memory_, bit_start, access_width);
     return bitop::AccessBitSequence(cs_daa_map_, bit_start, access_width);
 }
 
@@ -166,6 +177,8 @@ uint CsDaaMap::DAAOffsetOf(uint id, Permutation permutation) {
         access_width = not_shared_daa_offset_width_;
     }
 
+    if (in_memory_)
+        return bitop::AccessBitSequence(cs_daa_map_in_memory_, bit_start, access_width);
     return bitop::AccessBitSequence(cs_daa_map_, bit_start, access_width);
 }
 
@@ -180,14 +193,14 @@ std::pair<uint, uint> CsDaaMap::DAAOffsetSizeOf(uint id, Permutation permutation
         return {end, 0};
     }
 
-    if (id == 1) 
+    if (id == 1)
         return {0, end};
 
     uint daa_offset = 0;
     for (uint i = 1; i < id; ++i) {
         daa_offset = DAAOffsetOf(id - i, permutation);
 
-        if ((daa_offset & high_bit_mask) == 0) 
+        if ((daa_offset & high_bit_mask) == 0)
             break;
 
         if (id - i == 1) {

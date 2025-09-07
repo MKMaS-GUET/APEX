@@ -21,6 +21,8 @@
  */
 
 class IndexRetriever {
+    bool in_memory_ = false;
+
     std::string db_path_;
     std::string db_dictionary_path_;
     std::string db_index_path_;

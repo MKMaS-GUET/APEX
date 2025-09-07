@@ -68,7 +68,8 @@ DAAs::DAAs() {}
 
 DAAs::DAAs(std::string file_path) : file_path_(file_path) {}
 
-DAAs::DAAs(std::string file_path, uint daa_levels_width) : file_path_(file_path), daa_levels_width_(daa_levels_width) {}
+DAAs::DAAs(std::string file_path, uint daa_levels_width, bool in_memory)
+    : in_memory_(in_memory), file_path_(file_path), daa_levels_width_(daa_levels_width) {}
 
 void DAAs::Preprocess(std::vector<std::vector<std::vector<uint>>>& entity_set) {
     uint max = 0;
@@ -183,6 +184,22 @@ void DAAs::Load() {
     daa_levels_ = MMap<uint>(file_path_ + "daa_levels");
     daa_level_end_ = MMap<char>(file_path_ + "daa_level_end");
     daa_array_end_ = MMap<char>(file_path_ + "daa_array_end");
+    if (in_memory_) {
+        uint uint_cnt = daa_levels_.size_ + 3 / 4;
+        daa_levels_in_memory_ = new uint[uint_cnt];
+        for (uint i = 0; i < uint_cnt; i++)
+            daa_levels_in_memory_[i] = daa_levels_[i];
+
+        uint char_cnt = daa_level_end_.size_;
+        daa_level_end_in_memory_ = new char[char_cnt];
+        for (uint i = 0; i < char_cnt; i++)
+            daa_level_end_in_memory_[i] = daa_level_end_[i];
+
+        char_cnt = daa_array_end_.size_;
+        daa_array_end_in_memory_ = new char[char_cnt];
+        for (uint i = 0; i < char_cnt; i++)
+            daa_array_end_in_memory_[i] = daa_array_end_[i];
+    }
 }
 
 std::vector<uint>* DAAs::AccessDAAAllArrays(uint daa_offset, uint daa_size, std::vector<std::span<uint>>& offset2id) {
@@ -267,6 +284,8 @@ std::vector<uint>* DAAs::AccessDAAAllArrays(uint daa_offset, uint daa_size, std:
 
 uint DAAs::AccessLevels(ulong offset) {
     ulong bit_start = offset * ulong(daa_levels_width_);
+    if (in_memory_)
+        return bitop::AccessBitSequence(daa_levels_in_memory_, bit_start, daa_levels_width_);
     return bitop::AccessBitSequence(daa_levels_, bit_start, daa_levels_width_);
 }
 
@@ -285,25 +304,46 @@ std::vector<uint>* DAAs::AccessDAA(uint daa_offset, uint daa_size, std::span<uin
     value = AccessLevels(value_offset);
     result->push_back(value);
 
-    bitop::One one = bitop::One(daa_level_end_, daa_offset, daa_offset + daa_size);
+    bitop::One one;
+    if (in_memory_)
+        one = bitop::One(daa_level_end_in_memory_, daa_offset, daa_offset + daa_size);
+    else
+        one = bitop::One(daa_level_end_, daa_offset, daa_offset + daa_size);
+
     if (daa_size == 1) {
         result->operator[](0) = offset2id[result->at(0)];
         return result;
     }
 
-    uint level_start = daa_offset;
-    while (!bit_get(daa_array_end_, value_offset)) {
-        index = index - bitop::range_rank(daa_array_end_, level_start, level_start + index);
+    if (in_memory_) {
+        uint level_start = daa_offset;
+        while (!bit_get(daa_array_end_in_memory_, value_offset)) {
+            index = index - bitop::range_rank(daa_array_end_in_memory_, level_start, level_start + index);
 
-        level_start = one.Next() + 1;
-        value_offset = level_start + index;
+            level_start = one.Next() + 1;
+            value_offset = level_start + index;
 
-        value = AccessLevels(value_offset) + result->back();
-        result->push_back(value);
+            value = AccessLevels(value_offset) + result->back();
+            result->push_back(value);
+        }
+
+        for (uint i = 0; i < result->size(); i++)
+            result->operator[](i) = offset2id[result->at(i)];
+    } else {
+        uint level_start = daa_offset;
+        while (!bit_get(daa_array_end_, value_offset)) {
+            index = index - bitop::range_rank(daa_array_end_, level_start, level_start + index);
+
+            level_start = one.Next() + 1;
+            value_offset = level_start + index;
+
+            value = AccessLevels(value_offset) + result->back();
+            result->push_back(value);
+        }
+
+        for (uint i = 0; i < result->size(); i++)
+            result->operator[](i) = offset2id[result->at(i)];
     }
-
-    for (uint i = 0; i < result->size(); i++)
-        result->operator[](i) = offset2id[result->at(i)];
 
     return result;
 }

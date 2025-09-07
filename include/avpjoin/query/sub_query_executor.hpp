@@ -16,6 +16,7 @@ using Position = SPARQLParser::Term::Position;
 
 class SubQueryExecutor {
    private:
+    uint max_threads_ = 32;
     bool zero_result_;
     uint variable_id_;
 

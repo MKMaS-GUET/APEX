@@ -76,7 +76,8 @@ CharacteristicSet::CharacteristicSet(uint cnt) {
     base_ = (cnt * 2 + 1) * 4;
 }
 
-CharacteristicSet::CharacteristicSet(std::string file_path) : file_path_(file_path) {}
+CharacteristicSet::CharacteristicSet(std::string file_path, bool in_memory)
+    : file_path_(file_path), in_memory_(in_memory) {}
 
 void CharacteristicSet::Load() {
     MMap<uint> c_sets = MMap<uint>(file_path_);
@@ -88,6 +89,11 @@ void CharacteristicSet::Load() {
     for (uint set_id = 1; set_id <= count; set_id++)
         offset_size_[set_id - 1] = {c_sets[2 * set_id - 1], c_sets[2 * set_id]};
     c_sets.CloseMap();
+
+    if (in_memory_) {
+        for (uint c_id = 1; c_id <= count; c_id++)
+            operator[](c_id);
+    }
 }
 
 void CharacteristicSet::Build(std::vector<std::pair<uint8_t*, uint>>& compressed_sets,

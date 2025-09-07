@@ -76,6 +76,15 @@ class MMap {
         return error;
     }
 
+    T& at(ulong offset) {
+        if (offset >= 0 && offset < size_ / sizeof(T)) {
+            return map_[offset];
+        }
+        static T error = 0;
+
+        return error;
+    }
+
     void CloseMap() {
         if (size_) {
             if (msync(map_, size_, MS_SYNC) == -1) {

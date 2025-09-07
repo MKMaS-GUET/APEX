@@ -25,6 +25,8 @@ class DAAs {
     };
 
    private:
+    bool in_memory_;
+
     std::string file_path_;
 
     std::vector<ulong> daa_offsets_;
@@ -34,6 +36,10 @@ class DAAs {
     MMap<char> daa_level_end_;
     MMap<char> daa_array_end_;
 
+    uint* daa_levels_in_memory_;
+    char* daa_level_end_in_memory_;
+    char* daa_array_end_in_memory_;
+
     void Preprocess(std::vector<std::vector<std::vector<uint>>>& entity_set);
 
     void BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set);
@@ -41,7 +47,7 @@ class DAAs {
    public:
     DAAs();
     DAAs(std::string file_path);
-    DAAs(std::string file_path, uint daa_levels_width);
+    DAAs(std::string file_path, uint daa_levels_width, bool in_memory);
 
     void Build(std::vector<std::vector<std::vector<uint>>>& entity_set);
 

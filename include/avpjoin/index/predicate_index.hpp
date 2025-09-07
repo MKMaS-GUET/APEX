@@ -27,7 +27,6 @@ class PredicateIndex {
         void Build(std::vector<std::pair<uint, uint>>& so_pairs);
 
         void BuildMap();
-
     };
 
     enum Type { kPO, kPS };
@@ -35,6 +34,7 @@ class PredicateIndex {
     std::vector<Index> index_;
 
    private:
+    bool in_memory_ = true;
     bool compress_predicate_index_ = true;
     std::string file_path_;
     std::shared_ptr<phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>> pso_;
@@ -59,7 +59,7 @@ class PredicateIndex {
 
    public:
     PredicateIndex();
-    PredicateIndex(std::string file_path, uint max_predicate_id);
+    PredicateIndex(std::string file_path, uint max_predicate_id, bool in_memory);
     PredicateIndex(std::shared_ptr<phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>> pso,
                    std::string file_path,
                    uint max_predicate_id);

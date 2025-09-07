@@ -24,11 +24,14 @@ class CsDaaMap {
     enum Permutation { kSPO, kOPS };
 
    private:
+    bool in_memory_ = true;
+
     // File path for the mapping data.
     std::string file_path_;
 
     // Memory-mapped data structure for storing characteristic set and DAA mappings.
     MMap<uint> cs_daa_map_;
+    uint* cs_daa_map_in_memory_;
 
     /**
      * @brief Pair representing the width of characteristic set IDs.
@@ -108,7 +111,8 @@ class CsDaaMap {
              uint shared_cnt,
              uint subject_cnt,
              uint object_cnt,
-             uint shared_id_size);
+             uint shared_id_size,
+             bool in_memory);
 
     /**
      * @brief Builds the CsDaaMap using SPO and OPS mappings.

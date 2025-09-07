@@ -161,6 +161,8 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
             }
         }
 
+        // auto begin = std::chrono::high_resolution_clock::now();
+
         std::vector<uint> key(var_cnt, 0);
         while (true) {
             JoinList join_list;
@@ -216,10 +218,12 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
             if (group_idx == -1)
                 break;
         }
+        // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
+        // std::cout << time.count() << " ms" << std::endl;
         return local_result_len;
     };
 
-    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(16));
+    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(max_threads_));
     // num_threads = 1;
     // std::cout << max_join_cnt << " " << num_threads << std::endl;
     if (num_threads <= 1) {
@@ -298,7 +302,7 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
     }
 
     // 分块并行
-    uint num_threads = std::min<uint>(16, max_size / 1000 + 1);
+    uint num_threads = std::min<uint>(max_threads_, max_size / 1000 + 1);
     uint chunk_size = (max_size + num_threads - 1) / num_threads;
 
     std::vector<std::vector<uint>> partial_results(num_threads);
@@ -656,20 +660,19 @@ uint SubQueryExecutor::ResultSize() {
 SubQueryExecutor::~SubQueryExecutor() {
     if (zero_result_)
         return;
-    uint num_threads = 16;
 
     for (auto& map : result_map_) {
         if (map.empty())
             continue;
 
         uint total = map.size();
-        uint chunk_size = (total + num_threads - 1) / num_threads;
+        uint chunk_size = (total + max_threads_ - 1) / max_threads_;
 
         std::vector<std::pair<ResultMap::iterator, ResultMap::iterator>> ranges;
-        ranges.reserve(num_threads);
+        ranges.reserve(max_threads_);
 
         auto it = map.begin();
-        for (uint t = 0; t < num_threads; ++t) {
+        for (uint t = 0; t < max_threads_; ++t) {
             auto start_it = it;
             uint remaining = (t * chunk_size >= total) ? 0 : std::min(chunk_size, total - t * chunk_size);
             for (uint s = 0; s < remaining && it != map.end(); ++s)

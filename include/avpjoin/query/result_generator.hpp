@@ -6,6 +6,8 @@
 #include "result_map.hpp"
 
 class ResultGenerator {
+    uint max_threads_ = 32;
+
     int variable_id_;
 
     bool at_end_ = false;

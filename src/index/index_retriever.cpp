@@ -19,7 +19,8 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_path_(db_name) {
 
     max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
-    predicate_index_ = PredicateIndex(db_index_path_, dict_.predicate_cnt());
+    in_memory_ = true;
+    predicate_index_ = PredicateIndex(db_index_path_, dict_.predicate_cnt(), in_memory_);
 
     std::pair<uint, uint> cs_id_width;
     std::pair<uint, uint> daa_offset_width;
@@ -38,16 +39,16 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_path_(db_name) {
 
     cs_daa_map_ = CsDaaMap(db_index_path_ + "cs_daa_map", cs_id_width, daa_offset_width, not_shared_cs_id_width,
                            not_shared_daa_offset_width, dict_.shared_cnt(), dict_.subject_cnt(), dict_.object_cnt(),
-                           shared_id_size);
+                           shared_id_size, in_memory_);
 
-    spo_ = DAAs(spo_index_path_, spo_daa_levels_width);
+    spo_ = DAAs(spo_index_path_, spo_daa_levels_width, in_memory_);
     spo_.Load();
-    ops_ = DAAs(ops_index_path_, ops_daa_levels_width);
+    ops_ = DAAs(ops_index_path_, ops_daa_levels_width, in_memory_);
     ops_.Load();
 
-    subject_characteristic_set_ = CharacteristicSet(db_index_path_ + "s_c_sets");
+    subject_characteristic_set_ = CharacteristicSet(db_index_path_ + "s_c_sets", in_memory_);
     subject_characteristic_set_.Load();
-    object_characteristic_set_ = CharacteristicSet(db_index_path_ + "o_c_sets");
+    object_characteristic_set_ = CharacteristicSet(db_index_path_ + "o_c_sets", in_memory_);
     object_characteristic_set_.Load();
 }
 
