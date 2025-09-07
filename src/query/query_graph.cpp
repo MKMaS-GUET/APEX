@@ -39,18 +39,10 @@ void QueryGraph::Init() {
 
     uint last_degree = var_degree_pairs.back().second;
 
-    for (size_t i = 0; i < var_degree_pairs.size(); ++i) {
-        if (var_degree_pairs[i].second != last_degree) {
-            std::string candidate = var_degree_pairs[i].first;
-            vertex_status_[vertexes_[candidate]] = 1;
-        }
+    for (const auto& [var, degree] : var_degree_pairs) {
+        if (degree != last_degree)
+            vertex_status_[vertexes_[var]] = 1;
     }
-
-    // uint topk = 1;
-    // for (size_t i = 0; i < std::min<size_t>(topk, var_degree_pairs.size()); ++i) {
-    //     std::string candidate = var_degree_pairs[i].first;
-    //     vertex_status_[vertexes_[candidate]] = 1;
-    // }
 
     // uint topk = 50;
     // uint k = 0;

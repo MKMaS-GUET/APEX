@@ -26,14 +26,6 @@ void PredicateIndex::Index::BuildMap() {
     std::vector<uint>().swap(o_set);
 }
 
-void PredicateIndex::Index::Clear() {
-    std::vector<uint>().swap(s_set);
-    std::vector<uint>().swap(o_set);
-
-    phmap::flat_hash_map<uint, uint>().swap(sid2offset);
-    phmap::flat_hash_map<uint, uint>().swap(oid2offset);
-}
-
 PredicateIndex::PredicateIndex() {}
 
 PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id)
@@ -49,11 +41,15 @@ PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id)
     ps_sets_ = std::vector<std::span<uint>>(max_predicate_id_);
     po_sets_ = std::vector<std::span<uint>>(max_predicate_id_);
 
-    phmap::btree_map<uint, uint> s_sizes, o_sizes;
+    std::vector<std::pair<uint, uint>> s_sizes, o_sizes;
     for (uint pid = 1; pid <= max_predicate_id_; pid++) {
-        s_sizes.insert({GetSSetSize(pid), pid});
-        o_sizes.insert({GetOSetSize(pid), pid});
+        s_sizes.push_back({GetSSetSize(pid), pid});
+        o_sizes.push_back({GetOSetSize(pid), pid});
     }
+
+    std::sort(s_sizes.begin(), s_sizes.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::sort(o_sizes.begin(), o_sizes.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
     uint cnt = 0;
     for (auto rit = s_sizes.rbegin(); rit != s_sizes.rend() && cnt < 5; ++rit, cnt++)
         GetSSet(rit->second);
@@ -66,6 +62,11 @@ PredicateIndex::PredicateIndex(std::shared_ptr<phmap::flat_hash_map<uint, std::v
                                std::string file_path,
                                uint max_predicate_id)
     : file_path_(file_path), pso_(pso), max_predicate_id_(max_predicate_id) {}
+
+void PredicateIndex::Build() {
+    index_ = std::vector<Index>(max_predicate_id_);
+    BuildPredicateIndex();
+}
 
 void PredicateIndex::BuildPredicateIndex() {
     std::vector<std::pair<uint, uint>> predicate_rank;
@@ -233,11 +234,6 @@ void PredicateIndex::StorePredicateIndex() {
 
     predicate_index.CloseMap();
     predicate_index_arrays.CloseMap();
-}
-
-void PredicateIndex::Build() {
-    index_ = std::vector<Index>(max_predicate_id_);
-    BuildPredicateIndex();
 }
 
 void PredicateIndex::Store() {

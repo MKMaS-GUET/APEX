@@ -180,17 +180,15 @@ std::pair<uint, uint> CsDaaMap::DAAOffsetSizeOf(uint id, Permutation permutation
         return {end, 0};
     }
 
-    if (id == 1) {
+    if (id == 1) 
         return {0, end};
-    }
 
     uint daa_offset = 0;
     for (uint i = 1; i < id; ++i) {
         daa_offset = DAAOffsetOf(id - i, permutation);
 
-        if ((daa_offset & high_bit_mask) == 0) {
+        if ((daa_offset & high_bit_mask) == 0) 
             break;
-        }
 
         if (id - i == 1) {
             daa_offset = 0;

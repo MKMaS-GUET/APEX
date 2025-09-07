@@ -14,6 +14,7 @@
 
 #include "avpjoin/dictionary/dictionary.hpp"
 #include "avpjoin/index/daas.hpp"
+#include "avpjoin/index/new_predicate_index.hpp"
 #include "avpjoin/index/predicate_index.hpp"
 
 namespace fs = std::filesystem;

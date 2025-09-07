@@ -2,7 +2,6 @@
 #define INDEX_RETRIEVER_HPP
 
 #include <limits.h>
-
 #include <fstream>
 #include <iostream>
 #include <span>
@@ -13,6 +12,7 @@
 #include "avpjoin/index/characteristic_set.hpp"
 #include "avpjoin/index/cs_daa_map.hpp"
 #include "avpjoin/index/daas.hpp"
+#include "avpjoin/index/new_predicate_index.hpp"
 #include "avpjoin/index/predicate_index.hpp"
 
 /**
