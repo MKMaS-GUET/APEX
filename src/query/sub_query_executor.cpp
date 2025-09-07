@@ -17,6 +17,7 @@ SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
     result_generator_ = nullptr;
     remaining_variables_ = pre_processor_.variables();
     execute_cost_ = std::chrono::duration<double, std::milli>(0);
+    build_group_cost_ = std::chrono::duration<double, std::milli>(0);
     first_variable_range_ = {0, 0};
 
     if (pre_processor_.zero_result()) {
@@ -145,7 +146,7 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
 
     std::atomic<uint> result_len = 0;
 
-    auto joinWorker = [&](auto begin_it, auto end_it, uint target_group_idx, ResultMap& local_result) -> uint {
+    auto joinWorker = [&](auto begin_it, auto end_it, uint target_group_idx) -> uint {
         uint local_result_len = 0;
         std::vector<VariableGroup::iterator> iterators(group_cnt);
         std::vector<VariableGroup::iterator> ends(group_cnt);
@@ -199,7 +200,7 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
             std::vector<uint>* intersection = LeapfrogJoin(join_list);
             // join_list.Clear();
             if (!intersection->empty()) {
-                auto emplace_result = local_result.emplace(key, intersection);
+                auto emplace_result = result.emplace(key, intersection);
                 if (emplace_result.second)  // 只有在成功插入时才更新
                     local_result_len += intersection->size();
                 else
@@ -224,10 +225,10 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
     };
 
     uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(max_threads_));
-    // num_threads = 1;
+    num_threads = max_threads_;
     // std::cout << max_join_cnt << " " << num_threads << std::endl;
     if (num_threads <= 1) {
-        uint result_len = joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt, result);
+        uint result_len = joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt);
         return result_len;
     }
 
@@ -251,15 +252,15 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
     for (const auto& range : ranges) {
         threads.emplace_back([&, range]() {
             ResultMap thread_result;
-            joinWorker(range.first, range.second, max_group_idx, thread_result);
+            uint thread_result_len = joinWorker(range.first, range.second, max_group_idx);
             {
                 std::lock_guard<std::mutex> lock(result_mutex);
-                uint thread_result_len = 0;
-                for (auto& [key_val, val] : thread_result) {
-                    auto emplace_result = result.emplace(key_val, std::move(val));
-                    if (emplace_result.second)  // 只有在成功插入时才更新
-                        thread_result_len += emplace_result.first->second->size();
-                }
+                // uint thread_result_len = 0;
+                // for (auto& [key_val, val] : thread_result) {
+                //     auto emplace_result = result.emplace(key_val, std::move(val));
+                //     if (emplace_result.second)  // 只有在成功插入时才更新
+                //         thread_result_len += emplace_result.first->second->size();
+                // }
                 result_len += thread_result_len;
             }
         });
@@ -626,12 +627,15 @@ void SubQueryExecutor::PostProcess() {
         return;
     while (true) {
         // std::cout << "-------------------------------" << std::endl;
-        for (size_t i = 1; i < result_map_.size(); ++i)
-            result_map_[i].clear();
+
         variable_id_ = 1;
         zero_result_ = false;
         if (UpdateFirstVariableRange())
             break;
+
+        for (size_t i = 1; i < result_map_.size(); ++i)
+            result_map_[i].clear();
+
         for (uint id = 1; id < variable_order_.size(); id++) {
             // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(variable_order_[id]);

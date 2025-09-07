@@ -21,7 +21,8 @@ CsDaaMap::CsDaaMap(std::string file_path,
                    uint object_cnt,
                    uint shared_id_size,
                    bool in_memory)
-    : file_path_(file_path),
+    : in_memory_(in_memory),
+      file_path_(file_path),
       cs_id_width_(cs_id_width),
       daa_offset_width_(daa_offset_width),
       not_shared_cs_id_width_(not_shared_cs_id_width),
@@ -29,11 +30,10 @@ CsDaaMap::CsDaaMap(std::string file_path,
       shared_cnt_(shared_cnt),
       subject_cnt_(subject_cnt),
       object_cnt_(object_cnt),
-      shared_id_size_(shared_id_size),
-      in_memory_(in_memory) {
+      shared_id_size_(shared_id_size) {
     cs_daa_map_ = MMap<uint>(file_path_);
     if (in_memory_) {
-        uint uint_cnt = cs_daa_map_.size_ + 3 / 4;
+        uint uint_cnt = (cs_daa_map_.size_ + 3) / 4;
         cs_daa_map_in_memory_ = new uint[uint_cnt];
         for (uint i = 0; i < uint_cnt; i++)
             cs_daa_map_in_memory_[i] = cs_daa_map_[i];

@@ -26,6 +26,15 @@ struct VectorHash {
     }
 };
 
-using ResultMap = phmap::parallel_flat_hash_map<std::vector<uint>, std::vector<uint>*, VectorHash>;
+// using ResultMap = phmap::parallel_flat_hash_map<std::vector<uint>, std::vector<uint>*, VectorHash>;
+
+using ResultMap = phmap::parallel_flat_hash_map<std::vector<uint>,
+                                                std::vector<uint>*,
+                                                VectorHash,
+                                                std::equal_to<std::vector<uint>>,
+                                                std::allocator<std::pair<const std::vector<uint>, std::vector<uint>*>>,
+                                                6,          // 使用64个子映射(2^6)
+                                                std::mutex  // 启用内部锁定
+                                                >;
 
 #endif

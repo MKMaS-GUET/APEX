@@ -77,7 +77,7 @@ CharacteristicSet::CharacteristicSet(uint cnt) {
 }
 
 CharacteristicSet::CharacteristicSet(std::string file_path, bool in_memory)
-    : file_path_(file_path), in_memory_(in_memory) {}
+    : in_memory_(in_memory), file_path_(file_path) {}
 
 void CharacteristicSet::Load() {
     MMap<uint> c_sets = MMap<uint>(file_path_);

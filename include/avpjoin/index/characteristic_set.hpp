@@ -28,7 +28,7 @@ class CharacteristicSet {
     };
 
    private:
-    bool in_memory_ = true;
+    bool in_memory_;
 
     std::string file_path_;
     uint base_;

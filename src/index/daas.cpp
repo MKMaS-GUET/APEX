@@ -185,7 +185,7 @@ void DAAs::Load() {
     daa_level_end_ = MMap<char>(file_path_ + "daa_level_end");
     daa_array_end_ = MMap<char>(file_path_ + "daa_array_end");
     if (in_memory_) {
-        uint uint_cnt = daa_levels_.size_ + 3 / 4;
+        uint uint_cnt = (daa_levels_.size_ + 3) / 4;
         daa_levels_in_memory_ = new uint[uint_cnt];
         for (uint i = 0; i < uint_cnt; i++)
             daa_levels_in_memory_[i] = daa_levels_[i];
