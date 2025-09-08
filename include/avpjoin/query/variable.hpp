@@ -38,7 +38,7 @@ struct Variable {
                                   phmap::Hash<uint>,
                                   std::equal_to<uint>,
                                   std::allocator<std::pair<const uint, std::vector<uint>*>>,
-                                  4,
+                                  6,
                                   std::mutex>
         cache;
 

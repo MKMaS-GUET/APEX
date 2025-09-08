@@ -33,7 +33,7 @@ class ResultGenerator {
     void GenCandidateValue();
 
    public:
-    ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation, uint limit);
+    ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation, uint limit, uint max_threads);
 
     bool Update(std::vector<ResultMap>& result_map, std::pair<uint, uint> first_variable_range);
 

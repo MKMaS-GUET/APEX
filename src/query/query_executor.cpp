@@ -3,8 +3,8 @@
 
 #include "avpjoin/query/query_executor.hpp"
 
-QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser)
-    : index_(index), parser_(parser) {
+QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser, uint max_threads)
+    : max_threads_(max_threads), index_(index), parser_(parser) {
     zero_result_ = false;
     gen_plan_cost_ = 0;
 
@@ -163,7 +163,7 @@ QueryExecutor::~QueryExecutor() {
 void QueryExecutor::Query() {
     uint total_limit = parser_.Limit();
     for (auto& sub_query : sub_queries_) {
-        auto executor = new SubQueryExecutor(index_, sub_query, total_limit, false);
+        auto executor = new SubQueryExecutor(index_, sub_query, total_limit, false, max_threads_);
         executors_.push_back(executor);
         executor->Query();
         uint count = executor->ResultSize();
@@ -171,9 +171,11 @@ void QueryExecutor::Query() {
             zero_result_ = true;
             return;
         }
-        total_limit = (total_limit + count - 1) / count;
-        if (total_limit < 1)
-            total_limit = 1;
+        if (total_limit != __UINT32_MAX__) {
+            total_limit = (total_limit + count - 1) / count;
+            if (total_limit < 1)
+                total_limit = 1;
+        }
     }
 }
 
@@ -182,8 +184,8 @@ void QueryExecutor::Train(UDPService& service) {
 
     for (auto& sub_query : sub_queries_) {
         std::cout << "-------------------------------------" << std::endl;
-        SubQueryExecutor base_executor = SubQueryExecutor(index_, sub_query, limit, false);
-        SubQueryExecutor leaner_executor = SubQueryExecutor(index_, sub_query, limit, true);
+        SubQueryExecutor base_executor = SubQueryExecutor(index_, sub_query, limit, false, max_threads_);
+        SubQueryExecutor leaner_executor = SubQueryExecutor(index_, sub_query, limit, true, max_threads_);
         if (base_executor.query_end()) {
             zero_result_ = true;
             continue;
@@ -243,7 +245,7 @@ void QueryExecutor::Train(UDPService& service) {
 void QueryExecutor::Test(UDPService& service) {
     uint total_limit = parser_.Limit();
     for (auto& sub_query : sub_queries_) {
-        auto executor = new SubQueryExecutor(index_, sub_query, total_limit, true);
+        auto executor = new SubQueryExecutor(index_, sub_query, total_limit, true, max_threads_);
         executors_.push_back(executor);
         if (executor->query_end()) {
             zero_result_ = true;

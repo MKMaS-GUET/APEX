@@ -7,8 +7,9 @@
 SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
                                    const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
                                    uint limit,
-                                   bool use_order_generator)
-    : index_(index), pre_processor_(index, triple_partterns, use_order_generator) {
+                                   bool use_order_generator,
+                                   uint max_threads)
+    : max_threads_(max_threads), index_(index), pre_processor_(index, triple_partterns, use_order_generator) {
     zero_result_ = false;
     ordering_complete_ = false;
     use_order_generator_ = use_order_generator;
@@ -304,6 +305,7 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
 
     // 分块并行
     uint num_threads = std::min<uint>(max_threads_, max_size / 1000 + 1);
+    num_threads = max_threads_;
     uint chunk_size = (max_size + num_threads - 1) / num_threads;
 
     std::vector<std::vector<uint>> partial_results(num_threads);
@@ -499,13 +501,15 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
     if (variable_id_ == 0) {
         first_variable_result_len_ = result_len;
         if (result_limit_ != __UINT32_MAX__) {
-            if (first_variable_result_len_ < 20000) {
-                if (first_variable_result_len_ < 2)
-                    batch_size_ = first_variable_result_len_;
-                else
+            batch_size_ = result_limit_ < first_variable_result_len_ ? result_limit_ : first_variable_result_len_;
+            if (result_limit_ < 100)
+                batch_size_ = first_variable_result_len_;
+            if (batch_size_ < 20000) {
+                if (batch_size_ > 2)
                     batch_size_ = first_variable_result_len_ / 2;
-            } else
-                batch_size_ = 20000;
+            } else {
+                batch_size_ /= 10;
+            }
         } else {
             batch_size_ = first_variable_result_len_;
         }
@@ -549,7 +553,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
         result_len = ParallelJoin(next_vars, variable_groups, result_map_[variable_id_]);
     else
         result_len = FirstVariableJoin(next_vars, result_map_[variable_id_]);
-
+    // std::cout << result_len << std::endl;
     for (auto& group : variable_groups)
         group->~VariableGroup();
     UpdateStatus(variable, result_len);
@@ -561,7 +565,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
 
 bool SubQueryExecutor::UpdateFirstVariableRange() {
     first_variable_range_.first = first_variable_range_.second;
-    batch_size_ *= 1.5;
+    // batch_size_ *= 1.5;
     first_variable_range_.second += batch_size_;
 
     if (first_variable_range_.first >= first_variable_result_len_)
@@ -622,7 +626,7 @@ void SubQueryExecutor::Query() {
 }
 
 void SubQueryExecutor::PostProcess() {
-    result_generator_ = new ResultGenerator(result_relation_, result_limit_);
+    result_generator_ = new ResultGenerator(result_relation_, result_limit_, max_threads_);
     if (result_generator_->Update(result_map_, first_variable_range_))
         return;
     while (true) {
@@ -633,8 +637,10 @@ void SubQueryExecutor::PostProcess() {
         if (UpdateFirstVariableRange())
             break;
 
+        auto begin = std::chrono::high_resolution_clock::now();
         for (size_t i = 1; i < result_map_.size(); ++i)
             result_map_[i].clear();
+        execute_cost_ -= std::chrono::high_resolution_clock::now() - begin;
 
         for (uint id = 1; id < variable_order_.size(); id++) {
             // auto begin = std::chrono::high_resolution_clock::now();

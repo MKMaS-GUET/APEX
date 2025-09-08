@@ -1,7 +1,10 @@
 #include "avpjoin/query/result_generator.hpp"
 #include "avpjoin/query/result_map_iterator.hpp"
 
-ResultGenerator::ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation, uint limit) {
+ResultGenerator::ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
+                                 uint limit,
+                                 uint max_threads) {
+    max_threads_ = max_threads;
     result_relation_ = result_relation;
     limit_ = limit;
     gen_cost_ = std::chrono::duration<double, std::milli>(0);
@@ -29,7 +32,8 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
     if (total_range > first_map_size)
         total_range = first_map_size;
 
-    uint num_threads = std::min(static_cast<uint>(total_range / 128), static_cast<uint>(max_threads_));
+    uint num_threads = std::min(static_cast<uint>(total_range / 16), static_cast<uint>(max_threads_));
+    num_threads = max_threads_;
     // std::cout << first_map_size << " " << total_range << " " << num_threads << std::endl;
     if (num_threads == 0) {
         ResultMapIterator iter = ResultMapIterator(result_map_p, result_relation_, first_variable_range);
@@ -66,6 +70,7 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
     gen_cost_ += std::chrono::high_resolution_clock::now() - begin;
     std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
     // std::cout << "gen_cost: " << time.count() << std::endl;
+    // std::cout << "result count: " << count_->load() << std::endl;
     return count_->load() > limit_ && limit_ != __UINT32_MAX__;
 }
 

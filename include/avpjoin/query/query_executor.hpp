@@ -8,6 +8,8 @@
 #include "sub_query_executor.hpp"
 
 class QueryExecutor {
+    uint max_threads_;
+
     std::shared_ptr<IndexRetriever> index_;
 
     std::vector<std::vector<SPARQLParser::TriplePattern>> sub_queries_;
@@ -22,7 +24,7 @@ class QueryExecutor {
     bool zero_result_;
 
    public:
-    QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser);
+    QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser, uint max_threads);
 
     ~QueryExecutor();
 
