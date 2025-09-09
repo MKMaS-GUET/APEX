@@ -9,6 +9,7 @@
 
 class QueryExecutor {
     uint max_threads_;
+    bool is_cycle_;
 
     std::shared_ptr<IndexRetriever> index_;
 
@@ -22,6 +23,8 @@ class QueryExecutor {
     double gen_plan_cost_;
 
     bool zero_result_;
+
+    bool IsCycleGraph(const phmap::flat_hash_map<std::string, std::vector<std::string>>& adj_list);
 
    public:
     QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser, uint max_threads);

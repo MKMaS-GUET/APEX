@@ -37,6 +37,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
         }
     }
 
+    is_cycle_ = IsCycleGraph(adjacency_list_ud);
     int component_id = 0;
 
     // 使用BFS找到所有连通分量
@@ -155,6 +156,30 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser
     // std::cout << "----------------" << std::endl;
 }
 
+bool QueryExecutor::IsCycleGraph(const phmap::flat_hash_map<std::string, std::vector<std::string>>& adj_list) {
+    if (adj_list.size() < 3)
+        return false;  // 环至少需要3个节点
+
+    // 检查每个节点的度数是否都为2
+    for (const auto& [node, neighbors] : adj_list) {
+        if (neighbors.size() != 2)
+            return false;
+    }
+
+    // 检查是否为连通图（从任意节点开始DFS能访问所有节点）
+    phmap::flat_hash_set<std::string> visited;
+    std::function<void(const std::string&)> dfs = [&](const std::string& node) {
+        visited.insert(node);
+        for (const auto& neighbor : adj_list.at(node)) {
+            if (!visited.contains(neighbor))
+                dfs(neighbor);
+        }
+    };
+
+    dfs(adj_list.begin()->first);
+    return visited.size() == adj_list.size();
+}
+
 QueryExecutor::~QueryExecutor() {
     for (auto& executor : executors_)
         executor->~SubQueryExecutor();
@@ -163,7 +188,7 @@ QueryExecutor::~QueryExecutor() {
 void QueryExecutor::Query() {
     uint total_limit = parser_.Limit();
     for (auto& sub_query : sub_queries_) {
-        auto executor = new SubQueryExecutor(index_, sub_query, total_limit, false, max_threads_);
+        auto executor = new SubQueryExecutor(index_, sub_query, is_cycle_, total_limit, false, max_threads_);
         executors_.push_back(executor);
         executor->Query();
         uint count = executor->ResultSize();
@@ -184,8 +209,8 @@ void QueryExecutor::Train(UDPService& service) {
 
     for (auto& sub_query : sub_queries_) {
         std::cout << "-------------------------------------" << std::endl;
-        SubQueryExecutor base_executor = SubQueryExecutor(index_, sub_query, limit, false, max_threads_);
-        SubQueryExecutor leaner_executor = SubQueryExecutor(index_, sub_query, limit, true, max_threads_);
+        SubQueryExecutor base_executor = SubQueryExecutor(index_, sub_query, is_cycle_, limit, false, max_threads_);
+        SubQueryExecutor leaner_executor = SubQueryExecutor(index_, sub_query, is_cycle_, limit, true, max_threads_);
         if (base_executor.query_end()) {
             zero_result_ = true;
             continue;
@@ -245,7 +270,7 @@ void QueryExecutor::Train(UDPService& service) {
 void QueryExecutor::Test(UDPService& service) {
     uint total_limit = parser_.Limit();
     for (auto& sub_query : sub_queries_) {
-        auto executor = new SubQueryExecutor(index_, sub_query, total_limit, true, max_threads_);
+        auto executor = new SubQueryExecutor(index_, sub_query, is_cycle_, total_limit, true, max_threads_);
         executors_.push_back(executor);
         if (executor->query_end()) {
             zero_result_ = true;

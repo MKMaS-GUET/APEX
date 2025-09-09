@@ -45,7 +45,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
                 std::cout << sparql << std::endl;
             }
 
-            uint max_threads = 32;
+            uint max_threads = 1;
             SPARQLParser parser = SPARQLParser(sparql);
             QueryExecutor executor = QueryExecutor(index, parser, max_threads);
             executor.Query();

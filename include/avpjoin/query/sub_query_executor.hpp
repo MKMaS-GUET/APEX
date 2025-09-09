@@ -17,6 +17,7 @@ using Position = SPARQLParser::Term::Position;
 class SubQueryExecutor {
    private:
     uint max_threads_ = 16;
+    bool is_cycle_ = false;
     bool zero_result_;
     uint variable_id_;
 
@@ -59,6 +60,7 @@ class SubQueryExecutor {
 
     SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
                      const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
+                     bool is_cycle,
                      uint limit,
                      bool use_order_generator, uint max_threads);
 

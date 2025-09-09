@@ -7,10 +7,14 @@
 
 SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
                                    const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
+                                   bool is_cycle,
                                    uint limit,
                                    bool use_order_generator,
                                    uint max_threads)
-    : max_threads_(max_threads), index_(index), pre_processor_(index, triple_partterns, use_order_generator) {
+    : max_threads_(max_threads),
+      is_cycle_(is_cycle),
+      index_(index),
+      pre_processor_(index, triple_partterns, use_order_generator) {
     zero_result_ = false;
     ordering_complete_ = false;
     use_order_generator_ = use_order_generator;
@@ -519,13 +523,22 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
         first_variable_result_len_ = result_len;
         if (result_limit_ != __UINT32_MAX__) {
             batch_size_ = first_variable_result_len_ ? result_limit_ : first_variable_result_len_;
-            if (result_limit_ <= 1000)
-                batch_size_ = first_variable_result_len_;
-            if (batch_size_ < 20000) {
-                if (batch_size_ > 2)
-                    batch_size_ = first_variable_result_len_ / 2;
+            if (is_cycle_ && first_variable_result_len_ > 2000000) {
+                batch_size_ = first_variable_result_len_ / 50;
             } else {
-                batch_size_ /= 10;
+                if (result_limit_ <= 1000)
+                    batch_size_ = first_variable_result_len_;
+                if (batch_size_ < 20000) {
+                    if (batch_size_ > 2)
+                        batch_size_ = first_variable_result_len_ / 2;
+                } else {
+                    batch_size_ /= 10;
+                }
+            }
+            if (batch_size_ < 10) {
+                batch_size_ = first_variable_result_len_ / 5;
+                if (batch_size_ < 3)
+                    batch_size_ = first_variable_result_len_;
             }
         } else {
             batch_size_ = first_variable_result_len_;
@@ -630,11 +643,11 @@ void SubQueryExecutor::Query() {
 
         while (!query_end()) {
             std::string next_variable = NextVarieble();
-            auto begin = std::chrono::high_resolution_clock::now();
+            // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(next_variable);
-            std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
-            std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
-                      << std::endl;
+            // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
+            // std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
+            //           << std::endl;
         }
         Reset();
     }
@@ -660,11 +673,11 @@ void SubQueryExecutor::PostProcess() {
         execute_cost_ -= std::chrono::high_resolution_clock::now() - begin;
 
         for (uint id = 1; id < variable_order_.size(); id++) {
-            auto begin = std::chrono::high_resolution_clock::now();
+            // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(variable_order_[id]);
             std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
-            std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " << time.count()
-                      << " ms" << std::endl;
+            // std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " << time.count()
+            //           << " ms" << std::endl;
             if (zero_result_)
                 break;
         }
