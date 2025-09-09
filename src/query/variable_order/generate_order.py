@@ -88,7 +88,7 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
 
     time_rew = torch.tensor(rewards_raw[1], dtype=torch.float32, device=device)
     time_rew = torch.where(
-        torch.abs(time_rew) < 1, torch.tensor(1.0, device=device), time_rew
+        torch.abs(time_rew) < 1, torch.tensor(0.5, device=device), time_rew
     )
     time_reward_rms.update(time_rew)
     norm_time = time_reward_rms.normalize(time_rew)
@@ -277,8 +277,8 @@ critic_params = list(model.critic.parameters())
 
 optimizer = torch.optim.Adam(
     [
-        {"params": actor_params, "lr": 1e-3},
-        {"params": critic_params, "lr": 1e-3},
+        {"params": actor_params, "lr": 1e-4},
+        {"params": critic_params, "lr": 1e-4},
     ]
 )
 

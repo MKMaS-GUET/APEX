@@ -1,6 +1,7 @@
 #include <numeric>
 #include <unordered_set>
 
+#include <random>
 #include "avpjoin/query/sub_query_executor.hpp"
 #include "avpjoin/utils/disjoint_set_union.hpp"
 
@@ -62,7 +63,23 @@ std::string SubQueryExecutor::NextVarieble() {
     std::sort(candidate_variable.begin(), candidate_variable.end(),
               [&](std::string a, std::string b) { return var_cnt[a] > var_cnt[b]; });
 
-    std::string next_variable = candidate_variable.front();
+    // 找出最高 var_cnt 的变量
+    uint max_cnt = 0;
+    for (const auto& v : candidate_variable) {
+        if (var_cnt[v] > max_cnt)
+            max_cnt = var_cnt[v];
+    }
+    std::vector<std::string> top_candidates;
+    for (const auto& v : candidate_variable) {
+        if (var_cnt[v] == max_cnt) {
+            top_candidates.push_back(v);
+            // std::cout << v << std::endl;
+        }
+    }
+    // 随机选一个
+    static thread_local std::mt19937 gen(std::random_device{}());
+    std::uniform_int_distribution<size_t> dist(0, top_candidates.size() - 1);
+    std::string next_variable = top_candidates[dist(gen)];
 
     // std::vector<std::string> test = {"?x3", "?x4", "?x2", "?x1"};
     // next_variable = test[variable_id_];
@@ -226,7 +243,7 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
     };
 
     uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(max_threads_));
-    num_threads = max_threads_;
+    // num_threads = max_threads_;
     // std::cout << max_join_cnt << " " << num_threads << std::endl;
     if (num_threads <= 1) {
         uint result_len = joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt);
@@ -304,8 +321,8 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
     }
 
     // 分块并行
-    uint num_threads = std::min<uint>(max_threads_, max_size / 1000 + 1);
-    num_threads = max_threads_;
+    uint num_threads = std::min<uint>(max_threads_, max_size / 32 + 1);
+    // num_threads = max_threads_;
     uint chunk_size = (max_size + num_threads - 1) / num_threads;
 
     std::vector<std::vector<uint>> partial_results(num_threads);
@@ -501,8 +518,8 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
     if (variable_id_ == 0) {
         first_variable_result_len_ = result_len;
         if (result_limit_ != __UINT32_MAX__) {
-            batch_size_ = result_limit_ < first_variable_result_len_ ? result_limit_ : first_variable_result_len_;
-            if (result_limit_ < 100)
+            batch_size_ = first_variable_result_len_ ? result_limit_ : first_variable_result_len_;
+            if (result_limit_ <= 1000)
                 batch_size_ = first_variable_result_len_;
             if (batch_size_ < 20000) {
                 if (batch_size_ > 2)
@@ -613,11 +630,11 @@ void SubQueryExecutor::Query() {
 
         while (!query_end()) {
             std::string next_variable = NextVarieble();
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(next_variable);
-            // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
-            // std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
-            //           << std::endl;
+            std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
+            std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
+                      << std::endl;
         }
         Reset();
     }
@@ -643,11 +660,11 @@ void SubQueryExecutor::PostProcess() {
         execute_cost_ -= std::chrono::high_resolution_clock::now() - begin;
 
         for (uint id = 1; id < variable_order_.size(); id++) {
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(variable_order_[id]);
-            // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
-            // std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " << time.count()
-            //           << " ms" << std::endl;
+            std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
+            std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " << time.count()
+                      << " ms" << std::endl;
             if (zero_result_)
                 break;
         }

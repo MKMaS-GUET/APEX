@@ -19,7 +19,7 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_path_(db_name) {
 
     max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
-    in_memory_ = true;
+    in_memory_ = false;
     predicate_index_ = PredicateIndex(db_index_path_, dict_.predicate_cnt(), in_memory_);
 
     std::pair<uint, uint> cs_id_width;

@@ -53,9 +53,9 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
 
             std::cout << result_count << " result(s)." << std::endl;
             // std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
-            std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
+            // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
-            std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
+            // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             double query_time = executor.execute_cost() +
                                 executor.build_group_cost() / ((max_threads) > 2 ? max_threads / 3 : max_threads) +
                                 executor.gen_result_cost();
@@ -138,11 +138,13 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
+            double query_time = executor.execute_cost() +
+                                executor.build_group_cost() / ((max_threads) > 2 ? max_threads / 3 : max_threads) +
+                                executor.gen_result_cost();
 
-            std::cout << "query takes " << query_time - executor.gen_plan_cost() << " ms." << std::endl;
+            std::cout << "query takes " << query_time << " ms." << std::endl;
 
-            total_time += (query_time - executor.gen_plan_cost());
+            total_time += query_time;
         }
         std::cout << "avg query time: " << total_time / sparqls.size() << " ms." << std::endl;
         exit(0);
