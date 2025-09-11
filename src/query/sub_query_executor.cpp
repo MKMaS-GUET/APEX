@@ -75,23 +75,22 @@ std::string SubQueryExecutor::NextVarieble() {
     }
     std::vector<std::string> top_candidates;
     for (const auto& v : candidate_variable) {
-        if (var_cnt[v] == max_cnt) {
+        if (var_cnt[v] == max_cnt)
             top_candidates.push_back(v);
-            // std::cout << v << std::endl;
-        }
     }
-    // 随机选一个
-    static thread_local std::mt19937 gen(std::random_device{}());
-    std::uniform_int_distribution<size_t> dist(0, top_candidates.size() - 1);
-    std::string next_variable = top_candidates[dist(gen)];
-
-    // std::vector<std::string> test = {"?x3", "?x4", "?x2", "?x1"};
+    std::string next_variable = top_candidates.back();
+    // std::vector<std::string> test = {"?x2", "?x1", "?x4", "?x3"};
     // next_variable = test[variable_id_];
 
+    // std::cout << next_variable << std::endl;
     return next_variable;
 }
 
 std::vector<uint>* SubQueryExecutor::LeapfrogJoin(JoinList& lists) {
+    // Check if any index is empty => Intersection empty
+    if (lists.HasEmpty())
+        return nullptr;
+
     std::vector<uint>* result_set = new std::vector<uint>();
 
     if (lists.Size() == 1) {
@@ -101,10 +100,6 @@ std::vector<uint>* SubQueryExecutor::LeapfrogJoin(JoinList& lists) {
 
         return result_set;
     }
-
-    // Check if any index is empty => Intersection empty
-    if (lists.HasEmpty())
-        return result_set;
 
     lists.UpdateCurrentPostion();
     // 创建指向每一个列表的指针，初始指向列表的第一个值
@@ -221,12 +216,16 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
 
             std::vector<uint>* intersection = LeapfrogJoin(join_list);
             // join_list.Clear();
-            if (!intersection->empty()) {
-                auto emplace_result = result.emplace(key, intersection);
-                if (emplace_result.second)  // 只有在成功插入时才更新
-                    local_result_len += intersection->size();
-                else
+            if (intersection != nullptr) {
+                if (!intersection->empty()) {
+                    auto emplace_result = result.emplace(key, intersection);
+                    if (emplace_result.second)  // 只有在成功插入时才更新
+                        local_result_len += intersection->size();
+                    else
+                        delete intersection;
+                } else {
                     delete intersection;
+                }
             }
 
             int group_idx = group_cnt - 1;
@@ -273,16 +272,9 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
 
     for (const auto& range : ranges) {
         threads.emplace_back([&, range]() {
-            ResultMap thread_result;
             uint thread_result_len = joinWorker(range.first, range.second, max_group_idx);
             {
                 std::lock_guard<std::mutex> lock(result_mutex);
-                // uint thread_result_len = 0;
-                // for (auto& [key_val, val] : thread_result) {
-                //     auto emplace_result = result.emplace(key_val, std::move(val));
-                //     if (emplace_result.second)  // 只有在成功插入时才更新
-                //         thread_result_len += emplace_result.first->second->size();
-                // }
                 result_len += thread_result_len;
             }
         });
@@ -325,8 +317,9 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
     }
 
     // 分块并行
-    uint num_threads = std::min<uint>(max_threads_, max_size / 32 + 1);
-    // num_threads = max_threads_;
+    uint num_threads = std::min<uint>(max_threads_, (max_size + 31) / 32);  // 避免多余线程
+    num_threads = std::min<uint>(num_threads, max_size);                    // 避免空块
+
     uint chunk_size = (max_size + num_threads - 1) / num_threads;
 
     std::vector<std::vector<uint>> partial_results(num_threads);
@@ -334,7 +327,9 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
 
     for (uint t = 0; t < num_threads; ++t) {
         uint begin = t * chunk_size;
-        uint end = std::min(max_size, (t + 1) * chunk_size);
+        uint end = std::min(max_size, begin + chunk_size);  // 修正
+        if (begin >= end)
+            continue;  // 跳过空块
 
         threads.emplace_back([&, begin, end, t]() {
             JoinList join_list;
@@ -345,8 +340,12 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
                     join_list.AddList(lists[i]);
             }
             std::vector<uint>* intersection = LeapfrogJoin(join_list);
-            partial_results[t] = std::move(*intersection);
-            delete intersection;
+            if (intersection != nullptr) {
+                if (!intersection->empty())
+                    partial_results[t] = std::move(*intersection);
+                else
+                    delete intersection;
+            }
         });
     }
 
@@ -524,7 +523,7 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
         if (result_limit_ != __UINT32_MAX__) {
             batch_size_ = first_variable_result_len_ ? result_limit_ : first_variable_result_len_;
             if (is_cycle_ && first_variable_result_len_ > 2000000) {
-                batch_size_ = first_variable_result_len_ / 50;
+                batch_size_ = first_variable_result_len_ / 100;
             } else {
                 if (result_limit_ <= 1000)
                     batch_size_ = first_variable_result_len_;
@@ -675,7 +674,7 @@ void SubQueryExecutor::PostProcess() {
         for (uint id = 1; id < variable_order_.size(); id++) {
             // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(variable_order_[id]);
-            std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
+            // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
             // std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " << time.count()
             //           << " ms" << std::endl;
             if (zero_result_)

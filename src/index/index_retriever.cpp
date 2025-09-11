@@ -115,7 +115,7 @@ std::vector<uint>* IndexRetriever::GetBySP(uint sid, uint pid) {
             return spo_.AccessDAA(offset, size, predicate_index_.GetOSet(pid), index);
         }
     }
-    return new std::vector<uint>();
+    return nullptr;
 }
 
 // ?s p o
@@ -131,12 +131,10 @@ std::vector<uint>* IndexRetriever::GetByOP(uint oid, uint pid) {
             return ops_.AccessDAA(offset, size, predicate_index_.GetSSet(pid), index);
         }
     }
-    return new std::vector<uint>();
+    return nullptr;
 }
 // s ?p o
 std::vector<uint>* IndexRetriever::GetBySO(uint sid, uint oid) {
-    std::vector<uint>* result = new std::vector<uint>;
-
     if ((0 < sid && sid <= max_subject_id_) && (oid <= dict_.shared_cnt() || max_subject_id_ < oid)) {
         uint original_oid = oid;
         if (oid > dict_.shared_cnt())
@@ -147,6 +145,7 @@ std::vector<uint>* IndexRetriever::GetBySO(uint sid, uint oid) {
         cs_id = cs_daa_map_.ChararisticSetIdOf(oid, CsDaaMap::Permutation::kOPS);
         std::span<uint>& o_c_set = object_characteristic_set_[cs_id];
 
+        std::vector<uint>* result = new std::vector<uint>;
         for (uint i = 0; i < s_c_set.size(); i++) {
             for (uint j = 0; j < o_c_set.size(); j++) {
                 if (s_c_set[i] == o_c_set[j]) {
@@ -159,7 +158,7 @@ std::vector<uint>* IndexRetriever::GetBySO(uint sid, uint oid) {
         }
     }
 
-    return result;
+    return nullptr;
 }
 
 std::vector<uint>* IndexRetriever::GetByS(uint sid) {
@@ -177,7 +176,7 @@ std::vector<uint>* IndexRetriever::GetByS(uint sid) {
         result->erase(it, result->end());
         return result;
     }
-    return new std::vector<uint>();
+    return nullptr;
 }
 
 std::vector<uint>* IndexRetriever::GetByO(uint oid) {
@@ -195,7 +194,7 @@ std::vector<uint>* IndexRetriever::GetByO(uint oid) {
         result->erase(it, result->end());
         return result;
     }
-    return new std::vector<uint>();
+    return nullptr;
 }
 
 uint IndexRetriever::GetSSetSize(uint pid) {

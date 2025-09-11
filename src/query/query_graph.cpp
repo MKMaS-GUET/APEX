@@ -30,7 +30,6 @@ void QueryGraph::Init() {
     std::vector<std::pair<std::string, uint>> var_degree_pairs;
     for (auto& [v, id] : vertexes_) {
         uint degree = vertex_degree_[id];
-        // if (degree > 1)
         var_degree_pairs.emplace_back(v, degree);
     }
 

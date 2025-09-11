@@ -35,40 +35,44 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
 
     for (const auto& tp : one_variable_tp) {
         auto& [s, p, o] = tp;
-
         std::vector<uint>* set = nullptr;
         if (s.IsVariable()) {
             uint oid = index->Term2ID(o);
             uint pid = index->Term2ID(p);
             set = index->GetByOP(oid, pid);
+            if (set != nullptr) {
+                if (use_order_generator_)
+                    query_graph_.AddVertex({s.value, set->size()});
 
-            if (use_order_generator_)
-                query_graph_.AddVertex({s.value, set->size()});
-
-            variables_.insert(s.value);
-            str2var_[s.value].emplace_back(s.value, s.position, set);
+                variables_.insert(s.value);
+                str2var_[s.value].emplace_back(s.value, s.position, set);
+            }
         }
         if (p.IsVariable()) {
             uint sid = index->Term2ID(s);
             uint oid = index->Term2ID(o);
             set = index->GetBySO(sid, oid);
 
-            if (use_order_generator_)
-                query_graph_.AddVertex({p.value, set->size()});
+            if (set != nullptr) {
+                if (use_order_generator_)
+                    query_graph_.AddVertex({p.value, set->size()});
 
-            variables_.insert(p.value);
-            str2var_[p.value].emplace_back(p.value, p.position, set);
+                variables_.insert(p.value);
+                str2var_[p.value].emplace_back(p.value, p.position, set);
+            }
         }
         if (o.IsVariable()) {
             uint sid = index->Term2ID(s);
             uint pid = index->Term2ID(p);
             set = index->GetBySP(sid, pid);
 
-            if (use_order_generator_)
-                query_graph_.AddVertex({o.value, set->size()});
+            if (set != nullptr) {
+                if (use_order_generator_)
+                    query_graph_.AddVertex({o.value, set->size()});
 
-            variables_.insert(o.value);
-            str2var_[o.value].emplace_back(o.value, o.position, set);
+                variables_.insert(o.value);
+                str2var_[o.value].emplace_back(o.value, o.position, set);
+            }
         }
         if (set == nullptr || set->size() == 0) {
             zero_result_ = true;

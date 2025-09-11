@@ -3,10 +3,12 @@
 #include <iostream>
 
 JoinList::JoinList() {
+    has_empty_ = false;
     lists_ = std::vector<std::span<uint>>();
 }
 
 JoinList::JoinList(std::vector<std::span<uint>>& lists) : using_bin_search_(true) {
+    has_empty_ = false;
     AddLists(lists);
 }
 
@@ -27,22 +29,26 @@ void JoinList::AddList(const std::span<uint>& list) {
 }
 
 void JoinList::AddList(std::vector<uint>* list) {
-    need_to_delete_.push_back(list);
-    std::span<uint> span_list = std::span<uint>(list->data(), list->size());
-    if (lists_.size() == 0 || list->size() == 0) {
-        lists_.push_back(span_list);
-        return;
-    }
-    uint first_val = (*list)[0];
-    for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i].size() > 0)
-            if (lists_[i][0] > first_val) {
-                lists_.insert(lists_.begin() + i, span_list);
-                return;
-            }
-    }
+    if (list != nullptr) {
+        need_to_delete_.push_back(list);
+        std::span<uint> span_list = std::span<uint>(list->data(), list->size());
+        if (lists_.size() == 0 || list->size() == 0) {
+            lists_.push_back(span_list);
+            return;
+        }
+        uint first_val = (*list)[0];
+        for (long unsigned int i = 0; i < lists_.size(); i++) {
+            if (lists_[i].size() > 0)
+                if (lists_[i][0] > first_val) {
+                    lists_.insert(lists_.begin() + i, span_list);
+                    return;
+                }
+        }
 
-    lists_.push_back(span_list);
+        lists_.push_back(span_list);
+    } else {
+        has_empty_ = true;
+    }
 }
 
 void JoinList::AddLists(const std::vector<std::span<uint>>& lists) {
@@ -97,6 +103,8 @@ std::span<uint> JoinList::GetListByIndex(int i) {
 }
 
 bool JoinList::HasEmpty() {
+    if (has_empty_)
+        return true;
     for (long unsigned int i = 0; i < lists_.size(); i++) {
         if (lists_[i].size() == 0)
             return true;

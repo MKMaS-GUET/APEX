@@ -33,8 +33,7 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
         total_range = first_map_size;
 
     uint num_threads = std::min(static_cast<uint>(total_range / 4), static_cast<uint>(max_threads_));
-    // num_threads = max_threads_;
-    // std::cout << first_map_size << " " << total_range << " " << num_threads << std::endl;
+    num_threads = max_threads_;
     if (num_threads == 0) {
         ResultMapIterator iter = ResultMapIterator(result_map_p, result_relation_, first_variable_range);
         std::vector<std::vector<uint>>* results = new std::vector<std::vector<uint>>();
@@ -71,7 +70,7 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
     std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
     // std::cout << "gen_cost: " << time.count() << std::endl;
     // std::cout << "result count: " << count_->load() << std::endl;
-    return count_->load() > limit_ && limit_ != __UINT32_MAX__;
+    return count_->load() >= limit_ && limit_ != __UINT32_MAX__;
 }
 
 ResultGenerator::~ResultGenerator() {

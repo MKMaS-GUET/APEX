@@ -32,7 +32,7 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
             break
 
         query_graph = json.loads(msg)
-        logger.info(f"Step {step_count} query graph: {query_graph}")
+        # logger.info(f"Step {step_count} query graph: {query_graph}")
 
         # --- 模型前向 (不需要梯度) ---
         with torch.no_grad():

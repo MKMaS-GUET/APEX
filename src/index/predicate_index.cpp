@@ -54,16 +54,16 @@ PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id, boo
 
     if (!in_memory_) {
         uint cnt = 0;
-        for (auto rit = s_sizes.rbegin(); rit != s_sizes.rend() && cnt < 5; ++rit, cnt++)
-            GetSSet(rit->second);
+        for (auto it = s_sizes.begin(); it != s_sizes.end() && cnt < 5; ++it, cnt++)
+            GetSSet(it->second);
         cnt = 0;
-        for (auto rit = o_sizes.rbegin(); rit != o_sizes.rend() && cnt < 5; ++rit, cnt++)
-            GetOSet(rit->second);
+        for (auto it = o_sizes.begin(); it != o_sizes.end() && cnt < 5; ++it, cnt++)
+            GetOSet(it->second);
     } else {
-        for (auto rit = s_sizes.rbegin(); rit != s_sizes.rend(); ++rit)
-            GetSSet(rit->second);
-        for (auto rit = o_sizes.rbegin(); rit != o_sizes.rend(); ++rit)
-            GetOSet(rit->second);
+        for (auto it = s_sizes.begin(); it != s_sizes.end(); ++it)
+            GetSSet(it->second);
+        for (auto it = o_sizes.begin(); it != o_sizes.end(); ++it)
+            GetOSet(it->second);
     }
 }
 

@@ -62,6 +62,9 @@ void ResultMapIterator::Start(std::vector<std::vector<uint>>* results, std::atom
                 }
                 Next();
             } else {
+                if (variable_id_ == 0)
+                    if (count->load(std::memory_order_relaxed) >= limit)
+                        break;
                 Down();
             }
         }

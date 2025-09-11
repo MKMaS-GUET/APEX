@@ -24,6 +24,8 @@ class JoinList {
 
     std::vector<std::vector<uint>*> need_to_delete_;
 
+    bool has_empty_;
+
    public:
     JoinList();
 

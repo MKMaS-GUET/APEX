@@ -45,7 +45,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
                 std::cout << sparql << std::endl;
             }
 
-            uint max_threads = 1;
+            uint max_threads = 32;
             SPARQLParser parser = SPARQLParser(sparql);
             QueryExecutor executor = QueryExecutor(index, parser, max_threads);
             executor.Query();
@@ -56,8 +56,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            double query_time = executor.execute_cost() +
-                                executor.build_group_cost() / ((max_threads) > 2 ? max_threads / 3 : max_threads) +
+            double query_time = executor.execute_cost() + executor.build_group_cost() / (max_threads / 6.0) + 1.0 +
                                 executor.gen_result_cost();
             std::cout << "query takes " << query_time << " ms." << std::endl;
             total_time += query_time;
@@ -138,8 +137,7 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            double query_time = executor.execute_cost() +
-                                executor.build_group_cost() / ((max_threads) > 2 ? max_threads / 3 : max_threads) +
+            double query_time = executor.execute_cost() + executor.build_group_cost() / (max_threads / 6.0) + 1.0 +
                                 executor.gen_result_cost();
 
             std::cout << "query takes " << query_time << " ms." << std::endl;
