@@ -79,7 +79,8 @@ std::string SubQueryExecutor::NextVarieble() {
             top_candidates.push_back(v);
     }
     std::string next_variable = top_candidates.back();
-    // std::vector<std::string> test = {"?x2", "?x1", "?x4", "?x3"};
+    // std::vector<std::string> test = {"?x3", "?x4", "?x2", "?x1", "?x5"};
+    // std::vector<std::string> test = {"?x3", "?x2", "?x1", "?x5", "?x4"};
     // next_variable = test[variable_id_];
 
     // std::cout << next_variable << std::endl;
@@ -246,7 +247,7 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
     };
 
     uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(max_threads_));
-    // num_threads = max_threads_;
+    num_threads = max_threads_;
     // std::cout << max_join_cnt << " " << num_threads << std::endl;
     if (num_threads <= 1) {
         uint result_len = joinWorker(variable_groups[0]->begin(), variable_groups[0]->end(), group_cnt);
@@ -521,7 +522,7 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
     if (variable_id_ == 0) {
         first_variable_result_len_ = result_len;
         if (result_limit_ != __UINT32_MAX__) {
-            batch_size_ = first_variable_result_len_ ? result_limit_ : first_variable_result_len_;
+            batch_size_ = first_variable_result_len_ > result_limit_ ? result_limit_ : first_variable_result_len_;
             if (is_cycle_ && first_variable_result_len_ > 2000000) {
                 batch_size_ = first_variable_result_len_ / 100;
             } else {
@@ -594,7 +595,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
 
 bool SubQueryExecutor::UpdateFirstVariableRange() {
     first_variable_range_.first = first_variable_range_.second;
-    // batch_size_ *= 1.5;
+    batch_size_ *= 1.5;
     first_variable_range_.second += batch_size_;
 
     if (first_variable_range_.first >= first_variable_result_len_)

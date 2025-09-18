@@ -44,18 +44,19 @@ class RunningMeanStd:
 
 
 class GraphActorCritic(nn.Module):
-    def __init__(self, device, node_feature_dim=13, hidden_dim=256, max_id=10000):
+    def __init__(self, device, node_feature_dim=10, hidden_dim=256, max_id=10000):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.max_id = max_id
         self.device = device
 
         # 边特征嵌入层
-        self.edge_feat1_embed = nn.Embedding(self.max_id + 1, 5)  # 用于第一个特征
-        self.edge_feat2_embed = nn.Embedding(3, 3)  # 用于第二个特征，值0,1,2
+        self.edge_id_embed = nn.Embedding(self.max_id + 1, 4)  # 用于第一个特征
 
-        # 边聚合注意力网络
-        self.edge_attention = nn.Sequential(nn.Linear(8, 8), nn.Tanh(), nn.Linear(8, 1))
+        # 添加边特征注意力机制
+        self.edge_attention = nn.Sequential(
+            nn.Linear(7, 16), nn.ReLU(), nn.Linear(16, 1)  # 边特征维度为7 (4+3)
+        )
 
         # 使用标准的GCN卷积层，输入维度为node_feature_dim
         self.conv1 = GCNConv(node_feature_dim, hidden_dim)
@@ -98,49 +99,32 @@ class GraphActorCritic(nn.Module):
         edges = query_graph["edges"]
         num_nodes = len(query_graph["vertices"])
 
-        neighbor_stats = torch.zeros(num_nodes, 3, device=self.device)
-        status_int = status.int()
-
-        # 构建邻接表
-        adj = [[] for _ in range(num_nodes)]
-        for u, v in edges:
-            adj[u].append(v)
-            adj[v].append(u)
-
-        # 向量化统计邻居状态
-        for node in range(num_nodes):
-            neighbors = adj[node]
-            if neighbors:
-                neighbor_status = status_int[neighbors]
-                neighbor_stats[node, 0] = (neighbor_status == -1).sum()
-                neighbor_stats[node, 1] = (neighbor_status == 0).sum()
-                neighbor_stats[node, 2] = (neighbor_status == 1).sum()
-
         # 处理边特征聚合
-
         edge_features = query_graph.get("edge_features", [])
-        edge_agg_features = torch.zeros(num_nodes, 8, device=self.device)
+        edge_agg_features = torch.zeros(num_nodes, 7, device=self.device)
 
         if edge_features:
             edge_features_tensor = torch.tensor(
                 edge_features, dtype=torch.long, device=self.device
             )  # [num_edges, 2]
 
-            # 嵌入特征
-            feat1_embedded = self.edge_feat1_embed(
+            # 嵌入第一个特征
+            edge_id_embed = self.edge_id_embed(
                 edge_features_tensor[:, 0]
             )  # [num_edges, 4]
 
-            feat2_embedded = self.edge_feat2_embed(
-                edge_features_tensor[:, 1]
-            )  # [num_edges, 4]
+            # 对第二个特征使用one-hot编码
+            # 第二个特征的值为0,1,2，使用F.one_hot
+            edge_pos_onehot = F.one_hot(
+                edge_features_tensor[:, 1], num_classes=3
+            ).float()  # [num_edges, 3]
 
+            # 合并特征
             edge_embedded = torch.cat(
-                [feat1_embedded, feat2_embedded], dim=1
-            )  # [num_edges, 8]
+                [edge_id_embed, edge_pos_onehot], dim=1
+            )  # [num_edges, 7]
 
             # 为每个节点构建边嵌入列表
-
             node_edge_embedded = [[] for _ in range(num_nodes)]
             for idx, edge in enumerate(edges):
                 u, v = edge
@@ -151,15 +135,22 @@ class GraphActorCritic(nn.Module):
             # 对每个节点聚合边嵌入
             for i in range(num_nodes):
                 if len(node_edge_embedded[i]) > 0:
-                    embeds = torch.stack(node_edge_embedded[i])  # [num_edges_i, 8]
+                    embeds = torch.stack(node_edge_embedded[i])  # [num_edges_i, 7]
 
-                    # 计算注意力分数
-                    attention_scores = self.edge_attention(embeds)  # [num_edges_i, 1]
+                    # 使用注意力机制聚合
+                    attention_scores = self.edge_attention(embeds).squeeze(
+                        -1
+                    )  # [num_edges_i]
                     attention_weights = F.softmax(
                         attention_scores, dim=0
-                    )  # [num_edges_i, 1]
+                    )  # [num_edges_i]
 
-                    aggregated = torch.sum(attention_weights * embeds, dim=0)  # [8]
+                    # 加权聚合
+                    aggregated = torch.sum(
+                        embeds * attention_weights.unsqueeze(-1), dim=0
+                    )  # [7]
+
+                    # 修改这里，直接赋值所有7个维度
                     edge_agg_features[i] = aggregated
 
                 # 否则保持为零
@@ -167,20 +158,17 @@ class GraphActorCritic(nn.Module):
         # 拼接所有节点特征
         node_features = torch.stack(
             [
-                # status,
+                status,
                 est_size,
                 degree,
-                neighbor_stats[:, 0],
-                neighbor_stats[:, 1],
-                neighbor_stats[:, 2],
             ],
             dim=1,
-        )  # [num_nodes, 6]
+        )  # [num_nodes, 3]
 
         # 将边聚合特征拼接到节点特征
         node_features = torch.cat(
             [node_features, edge_agg_features], dim=1
-        )  # [num_nodes, 14]
+        )  # [num_nodes, 8]
 
         return node_features
 
