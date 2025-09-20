@@ -28,26 +28,71 @@ void QueryGraph::AddEdge(std::pair<std::string, uint> src,
 
 void QueryGraph::Init() {
     std::vector<std::pair<std::string, uint>> var_degree_pairs;
+    bool degree_less_3 = true;
     for (auto& [v, id] : vertexes_) {
         uint degree = vertex_degree_[id];
+        if (degree > 2)
+            degree_less_3 = false;
         var_degree_pairs.emplace_back(v, degree);
     }
 
-    std::sort(var_degree_pairs.begin(), var_degree_pairs.end(),
-              [](const auto& a, const auto& b) { return a.second > b.second; });
+    if (degree_less_3 == false) {
+        std::sort(var_degree_pairs.begin(), var_degree_pairs.end(),
+                  [](const auto& a, const auto& b) { return a.second > b.second; });
 
-    bool has_next = false;
-    uint last_degree = var_degree_pairs.back().second;
-    for (const auto& [var, degree] : var_degree_pairs) {
-        if (degree != last_degree) {
-            vertex_status_[vertexes_[var]] = 1;
-            has_next = true;
+        bool has_next = false;
+        uint last_degree = var_degree_pairs.back().second;
+        for (const auto& [var, degree] : var_degree_pairs) {
+            if (degree != last_degree) {
+                vertex_status_[vertexes_[var]] = 1;
+                has_next = true;
+            }
         }
-    }
-    if (!has_next) {
+        if (!has_next) {
+            for (const auto& [var, degree] : var_degree_pairs)
+                vertex_status_[vertexes_[var]] = 1;
+        }
+    } else {
         for (const auto& [var, degree] : var_degree_pairs)
             vertex_status_[vertexes_[var]] = 1;
     }
+
+    // print adjacency_list_
+    // if (!adjacency_list_.empty()) {
+    //     // 构造 id 到变量名的映射便于可读输出
+    //     std::vector<std::string> id2var(vertexes_.size());
+    //     for (const auto& [var, vid] : vertexes_)
+    //         if (vid < id2var.size())
+    //             id2var[vid] = var;
+
+    //     std::cout << "QueryGraph Adjacency List:" << std::endl;
+    //     // 为了稳定输出，对顶点 id 排序
+    //     std::vector<uint> ids;
+    //     ids.reserve(adjacency_list_.size());
+    //     for (const auto& kv : adjacency_list_)
+    //         ids.push_back(kv.first);
+    //     std::sort(ids.begin(), ids.end());
+
+    //     for (uint v_id : ids) {
+    //         const auto& nbrs = adjacency_list_.at(v_id);
+    //         std::cout << "  [" << v_id << "]";
+    //         if (v_id < id2var.size())
+    //             std::cout << " (" << id2var[v_id] << ")";
+    //         std::cout << " ->";
+    //         if (nbrs.empty()) {
+    //             std::cout << " {}";
+    //         } else {
+    //             for (const auto& e : nbrs) {
+    //                 // 输出格式: (edge_id,pos_enum_value,dst_id:dst_var)
+    //                 std::cout << " (" << e.id << "," << static_cast<uint>(e.pos) << "," << e.dst;
+    //                 if (e.dst < id2var.size())
+    //                     std::cout << ":" << id2var[e.dst];
+    //                 std::cout << ")";
+    //             }
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    // }
 
     // uint topk = 1;
     // uint k = 0;
@@ -91,9 +136,11 @@ void QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
         } else {
             // 检查其他顶点是否指向当前顶点
             for (const auto& edge : nbrs) {
-                if (est_size_updated_[v_id] == 0 || (edge.dst == vertex_id && cur_est_size < est_size_[v_id])) {
-                    est_size_[v_id] = cur_est_size;
-                    est_size_updated_[v_id] = 1;
+                if (edge.dst == vertex_id) {
+                    if (est_size_updated_[v_id] == 0 || cur_est_size < est_size_[v_id]) {
+                        est_size_[v_id] = cur_est_size;
+                        est_size_updated_[v_id] = 1;
+                    }
                 }
             }
         }

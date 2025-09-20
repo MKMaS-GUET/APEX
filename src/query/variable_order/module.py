@@ -44,18 +44,23 @@ class RunningMeanStd:
 
 
 class GraphActorCritic(nn.Module):
-    def __init__(self, device, node_feature_dim=10, hidden_dim=256, max_id=10000):
+    def __init__(self, device, node_feature_dim=3, hidden_dim=256, max_id=10000):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.max_id = max_id
         self.device = device
-
-        # 边特征嵌入层
-        self.edge_id_embed = nn.Embedding(self.max_id + 1, 4)  # 用于第一个特征
-
-        # 添加边特征注意力机制
-        self.edge_attention = nn.Sequential(
-            nn.Linear(7, 16), nn.ReLU(), nn.Linear(16, 1)  # 边特征维度为7 (4+3)
+        # 边特征嵌入层（两个离散特征：edge_id, edge_pos）
+        # 之后不再聚合到节点特征中，而是映射成边权重传入GCNConv
+        self.edge_id_embed = nn.Embedding(self.max_id + 1, 8)
+        self.edge_pos_embed = nn.Embedding(3, 2)
+        edge_feat_dim = (
+            self.edge_id_embed.embedding_dim + self.edge_pos_embed.embedding_dim
+        )
+        self.edge_weight_mlp = nn.Sequential(
+            nn.Linear(edge_feat_dim, edge_feat_dim),
+            nn.ReLU(),
+            nn.Linear(edge_feat_dim, 1),
+            nn.Sigmoid(),  # 将边权重限制在(0,1)
         )
 
         # 使用标准的GCN卷积层，输入维度为node_feature_dim
@@ -79,8 +84,7 @@ class GraphActorCritic(nn.Module):
         )
 
     def build_node_features(self, query_graph):
-
-        """构建节点特征，包括边特征聚合，并移动到设备"""
+        """构建节点特征（不再包含边特征聚合），并移动到设备"""
 
         status = torch.tensor(
             query_graph["status"], dtype=torch.float32, device=self.device
@@ -90,72 +94,27 @@ class GraphActorCritic(nn.Module):
                 query_graph["est_size"], dtype=torch.float32, device=self.device
             )
         )
-        degree = normalize(
-            torch.tensor(query_graph["degree"], dtype=torch.float32, device=self.device)
-        )
+        degree_less_3 = True
+        for d in query_graph["degree"]:
+            if d > 2:
+                degree_less_3 = False
+
+        if not degree_less_3:
+            degree = normalize(
+                torch.tensor(
+                    query_graph["degree"], dtype=torch.float32, device=self.device
+                )
+            )
+        else:
+            degree = torch.tensor(
+                torch.full((len(query_graph["degree"]),), 1.0),
+                dtype=torch.float32,
+                device=self.device,
+            )
+
         # print("est_size: ", est_size)
         # print("degree: ", degree)
-        # 计算总度数
-        edges = query_graph["edges"]
-        num_nodes = len(query_graph["vertices"])
-
-        # 处理边特征聚合
-        edge_features = query_graph.get("edge_features", [])
-        edge_agg_features = torch.zeros(num_nodes, 7, device=self.device)
-
-        if edge_features:
-            edge_features_tensor = torch.tensor(
-                edge_features, dtype=torch.long, device=self.device
-            )  # [num_edges, 2]
-
-            # 嵌入第一个特征
-            edge_id_embed = self.edge_id_embed(
-                edge_features_tensor[:, 0]
-            )  # [num_edges, 4]
-
-            # 对第二个特征使用one-hot编码
-            # 第二个特征的值为0,1,2，使用F.one_hot
-            edge_pos_onehot = F.one_hot(
-                edge_features_tensor[:, 1], num_classes=3
-            ).float()  # [num_edges, 3]
-
-            # 合并特征
-            edge_embedded = torch.cat(
-                [edge_id_embed, edge_pos_onehot], dim=1
-            )  # [num_edges, 7]
-
-            # 为每个节点构建边嵌入列表
-            node_edge_embedded = [[] for _ in range(num_nodes)]
-            for idx, edge in enumerate(edges):
-                u, v = edge
-                # 只将与节点相关的边特征添加到该节点的列表中
-                node_edge_embedded[u].append(edge_embedded[idx])
-                node_edge_embedded[v].append(edge_embedded[idx])
-
-            # 对每个节点聚合边嵌入
-            for i in range(num_nodes):
-                if len(node_edge_embedded[i]) > 0:
-                    embeds = torch.stack(node_edge_embedded[i])  # [num_edges_i, 7]
-
-                    # 使用注意力机制聚合
-                    attention_scores = self.edge_attention(embeds).squeeze(
-                        -1
-                    )  # [num_edges_i]
-                    attention_weights = F.softmax(
-                        attention_scores, dim=0
-                    )  # [num_edges_i]
-
-                    # 加权聚合
-                    aggregated = torch.sum(
-                        embeds * attention_weights.unsqueeze(-1), dim=0
-                    )  # [7]
-
-                    # 修改这里，直接赋值所有7个维度
-                    edge_agg_features[i] = aggregated
-
-                # 否则保持为零
-
-        # 拼接所有节点特征
+        # 拼接所有节点特征（当前仅3维）
         node_features = torch.stack(
             [
                 status,
@@ -165,28 +124,37 @@ class GraphActorCritic(nn.Module):
             dim=1,
         )  # [num_nodes, 3]
 
-        # 将边聚合特征拼接到节点特征
-        node_features = torch.cat(
-            [node_features, edge_agg_features], dim=1
-        )  # [num_nodes, 8]
-
         return node_features
 
-    def build_edge_index(self, edges):
+    def build_edge_index_and_weight(self, query_graph):
+        edges = query_graph.get("edges", [])
         if not edges:
-            return torch.empty((2, 0), dtype=torch.long, device=self.device)
+            edge_index = torch.empty((2, 0), dtype=torch.long, device=self.device)
+            return edge_index, None
         edge_index = (
             torch.tensor(edges, dtype=torch.long, device=self.device).t().contiguous()
         )
-        return edge_index
+        edge_features = query_graph.get("edge_features", None)
+        if edge_features is None or len(edge_features) == 0:
+            return edge_index, None
+        edge_features_tensor = torch.tensor(
+            edge_features, dtype=torch.long, device=self.device
+        )
+        # edge_features: [num_edges, 2] -> (id, pos)
+        id_embed = self.edge_id_embed(edge_features_tensor[:, 0])
+        pos_embed = self.edge_pos_embed(edge_features_tensor[:, 1])
+        edge_feat = torch.cat([id_embed, pos_embed], dim=1)
+        edge_weight = self.edge_weight_mlp(edge_feat).squeeze(-1)  # [num_edges]
+        return edge_index, edge_weight
 
     def forward(self, query_graph):
         node_features = self.build_node_features(query_graph)
         num_nodes = node_features.shape[0]
-
-        edge_index = self.build_edge_index(query_graph["edges"])
-        x = F.relu(self.conv1(node_features, edge_index))
-        x = F.relu(self.conv2(x, edge_index))  # [num_nodes, hidden_dim]
+        edge_index, edge_weight = self.build_edge_index_and_weight(query_graph)
+        if edge_weight is not None and edge_weight.numel() == 0:
+            edge_weight = None
+        x = F.relu(self.conv1(node_features, edge_index, edge_weight))
+        x = F.relu(self.conv2(x, edge_index, edge_weight))  # [num_nodes, hidden_dim]
 
         # 全局图表示
         graph_representation = torch.mean(x, dim=0)  # [hidden_dim]

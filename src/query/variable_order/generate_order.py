@@ -87,9 +87,11 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
     norm_len = len_reward_rms.normalize(len_rew)
 
     time_rew = torch.tensor(rewards_raw[1], dtype=torch.float32, device=device)
-    time_rew = torch.where(
-        torch.abs(time_rew) < 1, torch.tensor(0.5, device=device), time_rew
-    )
+    
+    for i in range(len(time_rew)):
+        if len_rew[i] == 0:
+            time_rew[i] = 0
+
     time_reward_rms.update(time_rew)
     norm_time = time_reward_rms.normalize(time_rew)
 

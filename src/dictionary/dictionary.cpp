@@ -44,17 +44,6 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
             id2entity = Node<ulong>(dict_path_ + file_name);
     };
 
-    auto build_cache = [&](uint beg, uint end) {
-        for (uint id = beg; id <= end; id += 1000) {
-            if (id <= shared_cnt())
-                delete[] ID2String(id, SPARQLParser::Term::Position::kShared);
-            else if (id <= shared_cnt() + subject_cnt())
-                delete[] ID2String(id, SPARQLParser::Term::Position::kSubject);
-            else
-                delete[] ID2String(id, SPARQLParser::Term::Position::kObject);
-        }
-    };
-
     std::thread t1([&]() { process_id2entity(menagement_data[4], "/subjects/", id2subject_); });
     std::thread t2([&]() { process_id2entity(menagement_data[5], "/objects/", id2object_); });
     std::thread t3([&]() { process_id2entity(menagement_data[6], "/shared/", id2shared_); });
@@ -62,16 +51,27 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     t2.join();
     t3.join();
 
-    uint cpu_count = std::thread::hardware_concurrency();
-    uint batch_size = (shared_cnt() + subject_cnt() + object_cnt()) / cpu_count;
-    std::vector<std::thread> threads;
-    for (uint i = 0; i < cpu_count; i++) {
-        uint start = i * batch_size + 1;
-        uint end = (i + 1) * batch_size;
-        threads.emplace_back(std::thread([start, end, &build_cache]() { build_cache(start, end); }));
-    }
-    for (auto& t : threads)
-        t.join();
+    // auto build_cache = [&](uint beg, uint end) {
+    //     for (uint id = beg; id <= end; id += 1000) {
+    //         if (id <= shared_cnt())
+    //             delete[] ID2String(id, SPARQLParser::Term::Position::kShared);
+    //         else if (id <= shared_cnt() + subject_cnt())
+    //             delete[] ID2String(id, SPARQLParser::Term::Position::kSubject);
+    //         else
+    //             delete[] ID2String(id, SPARQLParser::Term::Position::kObject);
+    //     }
+    // };
+
+    // uint cpu_count = std::thread::hardware_concurrency();
+    // uint batch_size = (shared_cnt() + subject_cnt() + object_cnt()) / cpu_count;
+    // std::vector<std::thread> threads;
+    // for (uint i = 0; i < cpu_count; i++) {
+    //     uint start = i * batch_size + 1;
+    //     uint end = (i + 1) * batch_size;
+    //     threads.emplace_back(std::thread([start, end, &build_cache]() { build_cache(start, end); }));
+    // }
+    // for (auto& t : threads)
+    //     t.join();
 
     menagement_data.CloseMap();
 }
