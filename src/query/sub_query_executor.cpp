@@ -43,84 +43,135 @@ std::string SubQueryExecutor::NextVarieble() {
     if (remaining_variables_.empty())
         return "";
 
+    phmap::flat_hash_map<std::string, uint> degrees;
     std::vector<std::string> candidate_variable;
-    std::string next_variable;
-    if (variable_id_ == 0) {
-        phmap::flat_hash_map<std::string, uint> est_size;
-        for (auto v : remaining_variables_) {
+
+    for (auto v : remaining_variables_) {
+        auto vars = pre_processor_.VarsOf(v);
+
+        uint neighbor = 0;
+        for (auto& var : *vars) {
+            if (var.is_none)
+                neighbor++;
+        }
+
+        if ((variable_order_.empty() && vars->size() > 1) || neighbor) {
             candidate_variable.push_back(v);
-            auto vars = pre_processor_.VarsOf(v);
-            uint var_min_size = __UINT32_MAX__;
-            for (auto& var : *vars) {
-                uint size = 0;
-                if (var.position == SPARQLParser::Term::kSubject) {
-                    if (var.triple_constant_pos == SPARQLParser::Term::kPredicate)
-                        size = index_->GetSSetSize(var.triple_constant_id);
-                    if (var.triple_constant_pos == SPARQLParser::Term::kObject)
-                        size = index_->GetByO(var.triple_constant_id)->size();
-                }
-                if (var.position == SPARQLParser::Term::kObject) {
-                    if (var.triple_constant_pos == SPARQLParser::Term::kPredicate)
-                        size = index_->GetOSetSize(var.triple_constant_id);
-                    if (var.triple_constant_pos == SPARQLParser::Term::kSubject)
-                        size = index_->GetByS(var.triple_constant_id)->size();
-                }
-                if (size != 0) {
-                    if (size < var_min_size)
-                        var_min_size = size;
-                }
-            }
-            est_size[v] = var_min_size;
+            degrees[v] = vars->size();
         }
-        std::sort(candidate_variable.begin(), candidate_variable.end(),
-                  [&](std::string a, std::string b) { return est_size[a] > est_size[b]; });
-
-        next_variable = candidate_variable.back();
-    } else {
-        phmap::flat_hash_map<std::string, uint> var_cnt;
-
-        for (auto v : remaining_variables_) {
-            auto vars = pre_processor_.VarsOf(v);
-
-            uint neighbor = 0;
-            for (auto& var : *vars) {
-                if (var.is_none)
-                    neighbor++;
-            }
-
-            if ((variable_order_.empty() && vars->size() > 1) || neighbor) {
-                candidate_variable.push_back(v);
-                var_cnt[v] = vars->size();
-            }
-        }
-
-        if (candidate_variable.empty())
-            candidate_variable = std::vector<std::string>(remaining_variables_.begin(), remaining_variables_.end());
-
-        std::sort(candidate_variable.begin(), candidate_variable.end(),
-                  [&](std::string a, std::string b) { return var_cnt[a] > var_cnt[b]; });
-
-        // 找出最高 var_cnt 的变量
-        uint max_cnt = 0;
-        for (const auto& v : candidate_variable) {
-            if (var_cnt[v] > max_cnt)
-                max_cnt = var_cnt[v];
-        }
-        std::vector<std::string> top_candidates;
-        for (const auto& v : candidate_variable) {
-            if (var_cnt[v] == max_cnt)
-                top_candidates.push_back(v);
-        }
-        next_variable = top_candidates.back();
     }
 
-    // std::vector<std::string> test = {"?x3", "?x4", "?x2", "?x1", "?x5"};
-    // std::vector<std::string> test = {"?x3", "?x2", "?x1", "?x5", "?x4"};
-    // next_variable = test[variable_id_];
+    if (candidate_variable.empty())
+        candidate_variable = std::vector<std::string>(remaining_variables_.begin(), remaining_variables_.end());
+
+    std::sort(candidate_variable.begin(), candidate_variable.end(),
+              [&](std::string a, std::string b) { return degrees[a] < degrees[b]; });
+
+    uint max_degree = degrees[candidate_variable.back()];
+    std::vector<std::string> top_candidates;
+    for (const auto& v : candidate_variable) {
+        if (degrees[v] == max_degree)
+            top_candidates.push_back(v);
+    }
+
+    std::string next_variable = top_candidates.back();
 
     // std::cout << next_variable << std::endl;
     return next_variable;
 }
+
+// std::string SubQueryExecutor::NextVarieble() {
+//     if (remaining_variables_.empty())
+//         return "";
+
+//     phmap::flat_hash_map<std::string, uint> degree;
+//     phmap::flat_hash_map<std::string, uint> est_size;
+//     std::vector<std::string> candidate_variable;
+//     std::string next_variable;
+
+//     if (variable_id_ == 0) {
+//         for (auto v : remaining_variables_) {
+//             auto vars = pre_processor_.VarsOf(v);
+
+//             degree[v] = vars->size();
+//             uint var_min_size = __UINT32_MAX__;
+//             for (auto& var : *vars) {
+//                 uint size = 0;
+//                 if (var.position == SPARQLParser::Term::kSubject) {
+//                     if (var.triple_constant_pos == SPARQLParser::Term::kPredicate)
+//                         size = index_->GetSSetSize(var.triple_constant_id);
+//                     if (var.triple_constant_pos == SPARQLParser::Term::kObject)
+//                         size = index_->GetByO(var.triple_constant_id)->size();
+//                 }
+//                 if (var.position == SPARQLParser::Term::kObject) {
+//                     if (var.triple_constant_pos == SPARQLParser::Term::kPredicate)
+//                         size = index_->GetOSetSize(var.triple_constant_id);
+//                     if (var.triple_constant_pos == SPARQLParser::Term::kSubject)
+//                         size = index_->GetByS(var.triple_constant_id)->size();
+//                 }
+//                 if (size != 0) {
+//                     if (size < var_min_size)
+//                         var_min_size = size;
+//                 }
+//             }
+//             est_size[v] = var_min_size;
+//         }
+
+//         bool degree_less_3 = true;
+//         uint min_degree = __UINT32_MAX__;
+//         for (auto v : remaining_variables_) {
+//             if (degree[v] > 2)
+//                 degree_less_3 = false;
+//             if (min_degree > degree[v])
+//                 min_degree = degree[v];
+//         }
+//         if (degree_less_3) {
+//             candidate_variable = std::vector<std::string>(remaining_variables_.begin(), remaining_variables_.end());
+//         } else {
+//             for (auto v : remaining_variables_) {
+//                 if (degree[v] != min_degree)
+//                     candidate_variable.push_back(v);
+//             }
+//         }
+//         std::sort(candidate_variable.begin(), candidate_variable.end(),
+//                   [&](std::string a, std::string b) { return est_size[a] > est_size[b]; });
+
+//         next_variable = candidate_variable.back();
+//     } else {
+//         for (auto v : remaining_variables_) {
+//             auto vars = pre_processor_.VarsOf(v);
+
+//             uint neighbor = 0;
+//             for (auto& var : *vars) {
+//                 if (var.is_none)
+//                     neighbor++;
+//             }
+
+//             if ((variable_order_.empty() && degree[v] > 1) || neighbor)
+//                 candidate_variable.push_back(v);
+//         }
+
+//         if (candidate_variable.empty())
+//             candidate_variable = std::vector<std::string>(remaining_variables_.begin(), remaining_variables_.end());
+
+//         std::sort(candidate_variable.begin(), candidate_variable.end(),
+//                   [&](std::string a, std::string b) { return degree[a] > degree[b]; });
+
+//         uint max_degree = degree[candidate_variable.front()];
+//         std::vector<std::string> top_candidates;
+//         for (const auto& v : candidate_variable) {
+//             if (degree[v] == max_degree)
+//                 top_candidates.push_back(v);
+//         }
+//         next_variable = top_candidates.back();
+//     }
+
+//     // std::vector<std::string> test = {"?x3", "?x4", "?x2", "?x1", "?x5"};
+//     // next_variable = test[variable_id_];
+
+//     // std::cout << next_variable << std::endl;
+//     return next_variable;
+// }
 
 std::vector<uint>* SubQueryExecutor::LeapfrogJoin(JoinList& lists) {
     // Check if any index is empty => Intersection empty

@@ -94,26 +94,33 @@ class GraphActorCritic(nn.Module):
                 query_graph["est_size"], dtype=torch.float32, device=self.device
             )
         )
-        degree_less_3 = True
-        for d in query_graph["degree"]:
-            if d > 2:
-                degree_less_3 = False
-
-        if not degree_less_3:
-            degree = normalize(
-                torch.tensor(
+        degree = normalize(
+            torch.tensor(
                     query_graph["degree"], dtype=torch.float32, device=self.device
-                )
             )
-        else:
-            degree = torch.tensor(
-                torch.full((len(query_graph["degree"]),), 1.0),
-                dtype=torch.float32,
-                device=self.device,
-            )
+        )
+
+        # degree_less_3 = True
+        # for d in query_graph["degree"]:
+        #     if d > 2:
+        #         degree_less_3 = False
+
+        # if not degree_less_3:
+        #     degree = normalize(
+        #         torch.tensor(
+        #             query_graph["degree"], dtype=torch.float32, device=self.device
+        #         )
+        #     )
+        # else:
+        #     degree = torch.tensor(
+        #         torch.full((len(query_graph["degree"]),), 1.0),
+        #         dtype=torch.float32,
+        #         device=self.device,
+        #     )
 
         # print("est_size: ", est_size)
         # print("degree: ", degree)
+        
         # 拼接所有节点特征（当前仅3维）
         node_features = torch.stack(
             [

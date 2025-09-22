@@ -90,7 +90,7 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
     
     for i in range(len(time_rew)):
         if len_rew[i] == 0:
-            time_rew[i] = 0
+            time_rew[i] = -0.5
 
     time_reward_rms.update(time_rew)
     norm_time = time_reward_rms.normalize(time_rew)

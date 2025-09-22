@@ -28,34 +28,50 @@ void QueryGraph::AddEdge(std::pair<std::string, uint> src,
 
 void QueryGraph::Init() {
     std::vector<std::pair<std::string, uint>> var_degree_pairs;
-    bool degree_less_3 = true;
+    // bool degree_less_3 = true;
     for (auto& [v, id] : vertexes_) {
         uint degree = vertex_degree_[id];
-        if (degree > 2)
-            degree_less_3 = false;
+        // if (degree > 2)
+            // degree_less_3 = false;
         var_degree_pairs.emplace_back(v, degree);
     }
 
-    if (degree_less_3 == false) {
-        std::sort(var_degree_pairs.begin(), var_degree_pairs.end(),
-                  [](const auto& a, const auto& b) { return a.second > b.second; });
+    std::sort(var_degree_pairs.begin(), var_degree_pairs.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
 
-        bool has_next = false;
-        uint last_degree = var_degree_pairs.back().second;
-        for (const auto& [var, degree] : var_degree_pairs) {
-            if (degree != last_degree) {
-                vertex_status_[vertexes_[var]] = 1;
-                has_next = true;
-            }
+    bool has_next = false;
+    uint last_degree = var_degree_pairs.back().second;
+    for (const auto& [var, degree] : var_degree_pairs) {
+        if (degree != last_degree) {
+            vertex_status_[vertexes_[var]] = 1;
+            has_next = true;
         }
-        if (!has_next) {
-            for (const auto& [var, degree] : var_degree_pairs)
-                vertex_status_[vertexes_[var]] = 1;
-        }
-    } else {
+    }
+    if (!has_next) {
         for (const auto& [var, degree] : var_degree_pairs)
             vertex_status_[vertexes_[var]] = 1;
     }
+
+    // if (degree_less_3 == false) {
+    //     std::sort(var_degree_pairs.begin(), var_degree_pairs.end(),
+    //               [](const auto& a, const auto& b) { return a.second > b.second; });
+
+    //     bool has_next = false;
+    //     uint last_degree = var_degree_pairs.back().second;
+    //     for (const auto& [var, degree] : var_degree_pairs) {
+    //         if (degree != last_degree) {
+    //             vertex_status_[vertexes_[var]] = 1;
+    //             has_next = true;
+    //         }
+    //     }
+    //     if (!has_next) {
+    //         for (const auto& [var, degree] : var_degree_pairs)
+    //             vertex_status_[vertexes_[var]] = 1;
+    //     }
+    // } else {
+    //     for (const auto& [var, degree] : var_degree_pairs)
+    //         vertex_status_[vertexes_[var]] = 1;
+    // }
 
     // print adjacency_list_
     // if (!adjacency_list_.empty()) {
