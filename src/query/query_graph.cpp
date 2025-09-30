@@ -32,7 +32,7 @@ void QueryGraph::Init() {
     for (auto& [v, id] : vertexes_) {
         uint degree = vertex_degree_[id];
         // if (degree > 2)
-            // degree_less_3 = false;
+        // degree_less_3 = false;
         var_degree_pairs.emplace_back(v, degree);
     }
 
@@ -145,15 +145,17 @@ void QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
         if (v_id == vertex_id) {
             // 更新当前顶点的邻居
             for (const auto& nbr : nbrs) {
-                if (est_size_updated_[nbr.dst] == 0 || cur_est_size < est_size_[nbr.dst]) {
-                    est_size_[nbr.dst] = cur_est_size;
-                    est_size_updated_[nbr.dst] = 1;
+                if (vertex_status_[nbr.dst] != -1) {
+                    if (est_size_updated_[nbr.dst] == 0 || cur_est_size < est_size_[nbr.dst]) {
+                        est_size_[nbr.dst] = cur_est_size;
+                        est_size_updated_[nbr.dst] = 1;
+                    }
                 }
             }
         } else {
             // 检查其他顶点是否指向当前顶点
             for (const auto& edge : nbrs) {
-                if (edge.dst == vertex_id) {
+                if (edge.dst == vertex_id && vertex_status_[v_id] != -1) {
                     if (est_size_updated_[v_id] == 0 || cur_est_size < est_size_[v_id]) {
                         est_size_[v_id] = cur_est_size;
                         est_size_updated_[v_id] = 1;
