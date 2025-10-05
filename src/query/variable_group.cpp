@@ -1,7 +1,7 @@
+#include "avpjoin/query/variable_group.hpp"
+
 #include <execution>
 #include <iostream>
-
-#include "avpjoin/query/variable_group.hpp"
 
 VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
                              std::pair<uint, uint> range,
@@ -10,132 +10,146 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
     level_ = -1;
     at_end_ = false;
 
-    std::vector<uint> intersection = group.ancestors[0];
+    bool use_optimization = true;
 
-    for (size_t i = 1; i < group.ancestors.size(); ++i) {
-        if (!group.ancestors[i].empty()) {
-            std::vector<uint> temp;
-            std::vector<uint> sorted_ancestor = group.ancestors[i];
-            std::sort(intersection.begin(), intersection.end());
-            std::sort(sorted_ancestor.begin(), sorted_ancestor.end());
+    std::vector<uint> levels;
+    if (use_optimization) {
+        std::vector<uint> intersection = group.ancestors[0];
 
-            set_intersection(intersection.begin(), intersection.end(), sorted_ancestor.begin(), sorted_ancestor.end(),
-                             back_inserter(temp));
-            intersection = std::move(temp);
+        for (size_t i = 1; i < group.ancestors.size(); ++i) {
+            if (!group.ancestors[i].empty()) {
+                std::vector<uint> temp;
+                std::vector<uint> sorted_ancestor = group.ancestors[i];
+                std::sort(intersection.begin(), intersection.end());
+                std::sort(sorted_ancestor.begin(), sorted_ancestor.end());
+
+                set_intersection(intersection.begin(), intersection.end(), sorted_ancestor.begin(),
+                                 sorted_ancestor.end(), back_inserter(temp));
+                intersection = std::move(temp);
+            }
+        }
+
+        std::sort(intersection.begin(), intersection.end());
+        uint max_level = intersection.back();
+
+        phmap::flat_hash_set<uint> ancestor_union;
+        ancestor_union.insert(max_level);
+        for (const auto& an : group.ancestors) {
+            for (auto a : an) {
+                if (a != max_level)
+                    ancestor_union.insert(a);
+                else
+                    break;
+            }
+        }
+        levels = std::vector<uint>(ancestor_union.begin(), ancestor_union.end());
+        std::sort(levels.begin(), levels.end());
+    } else {
+        for (uint i = 0; i < result_map.size(); i++) {
+            if (result_map[i].size()) 
+                levels.push_back(i);
         }
     }
-
-    std::sort(intersection.begin(), intersection.end());
-    uint max_level = intersection.back();
-
-    phmap::flat_hash_set<uint> ancestor_union;
-    ancestor_union.insert(max_level);
-    for (const auto& an : group.ancestors) {
-        for (auto a : an) {
-            if (a != max_level)
-                ancestor_union.insert(a);
-            else
-                break;
-        }
-    }
-
-    std::vector<uint> levels(ancestor_union.begin(), ancestor_union.end());
-    std::sort(levels.begin(), levels.end());
 
     var_offsets = group.var_offsets;
     key_offsets = group.key_offsets;
 
-    if (var_offsets.size() > 1) {
-        // build first map
-        ResultMap& first_map = result_map[levels[0]];
+    // if (var_offsets.size() > 1) {
+    // build first map
+    ResultMap& first_map = result_map[levels[0]];
 
-        if (first_map.size() > 1) {
-            size_t est_size = 0;
-            for (auto& [_, set] : first_map)
-                est_size += set->size();
+    if (first_map.size() > 1) {
+        size_t est_size = 0;
+        for (auto& [_, set] : first_map)
+            est_size += set->size();
 
+        std::vector<uint>* all_values = new std::vector<uint>();
+        all_values->reserve(est_size);
+        phmap::flat_hash_set<uint> unique_values;
+        unique_values.reserve(est_size);
+
+        for (auto& [_, set] : first_map) {
+            for (uint value : *set) {
+                if (unique_values.insert(value).second)
+                    all_values->push_back(value);
+            }
+        }
+
+        result_map_.push_back(new ResultMap());
+        result_map_[0]->emplace(std::vector<uint>(1, 0), all_values);
+    } else {
+        if (levels[0] == 0) {
+            std::vector<uint>* map_values = first_map.begin()->second;
+            uint end = range.second > map_values->size() ? map_values->size() : range.second;
             std::vector<uint>* all_values = new std::vector<uint>();
-            all_values->reserve(est_size);
-            for (auto& [_, set] : first_map)
-                all_values->insert(all_values->end(), set->begin(), set->end());
+            all_values->reserve(end - range.first);
 
-            std::sort(std::execution::par_unseq, all_values->begin(), all_values->end());
-            all_values->erase(std::unique(all_values->begin(), all_values->end()), all_values->end());
+            uint idx = 0;
+            for (uint i = range.first; i < end; i++) {
+                all_values->push_back(map_values->at(i));
+                idx++;
+            }
             result_map_.push_back(new ResultMap());
             result_map_[0]->emplace(std::vector<uint>(1, 0), all_values);
         } else {
-            if (levels[0] == 0) {
-                std::vector<uint>* map_values = first_map.begin()->second;
-                uint end = range.second > map_values->size() ? map_values->size() : range.second;
-                std::vector<uint>* all_values = new std::vector<uint>();
-                all_values->reserve(end - range.first);
-
-                uint idx = 0;
-                for (uint i = range.first; i < end; i++) {
-                    all_values->push_back(map_values->at(i));
-                    idx++;
-                }
-                result_map_.push_back(new ResultMap());
-                result_map_[0]->emplace(std::vector<uint>(1, 0), all_values);
-            } else {
-                result_map_.push_back(&first_map);
-            }
+            result_map_.push_back(&first_map);
         }
+    }
 
-        for (uint i = 1; i < levels.size(); i++)
-            result_map_.push_back(&result_map[levels[i]]);
+    for (uint i = 1; i < levels.size(); i++)
+        result_map_.push_back(&result_map[levels[i]]);
 
-        // prepare map keys
-        result_map_keys_.resize(result_map.size());
-        for (size_t i = 0; i < result_map_.size(); i++)
-            result_map_keys_[i] = std::vector<uint>(result_map_[i]->begin()->first.size(), 0);
+    // prepare map keys
+    result_map_keys_.resize(result_map.size());
+    for (size_t i = 0; i < result_map_.size(); i++)
+        result_map_keys_[i] = std::vector<uint>(result_map_[i]->begin()->first.size(), 0);
 
-        // build new result_relation
-        std::vector<uint> var_id_to_level = std::vector<uint>(result_relation.size(), 0);
-        for (uint i = 0; i < levels.size(); i++)
-            var_id_to_level[levels[i]] = i;
+    // build new result_relation
+    std::vector<uint> var_id_to_level = std::vector<uint>(result_relation.size(), 0);
+    for (uint i = 0; i < levels.size(); i++)
+        var_id_to_level[levels[i]] = i;
 
-        for (uint i = 0; i < levels.size(); i++) {
-            std::vector<std::pair<uint, uint>>& child_pos = result_relation[levels[i]];
-            std::vector<std::pair<uint, uint>> new_pos;
-            for (uint child_idx = 0; child_idx < child_pos.size(); child_idx++) {
-                if (child_pos[child_idx].first <= levels.back())
-                    new_pos.push_back({var_id_to_level[child_pos[child_idx].first], child_pos[child_idx].second});
-            }
-            result_relation_.push_back(new_pos);
+    for (uint i = 0; i < levels.size(); i++) {
+        std::vector<std::pair<uint, uint>>& child_pos = result_relation[levels[i]];
+        std::vector<std::pair<uint, uint>> new_pos;
+        for (uint child_idx = 0; child_idx < child_pos.size(); child_idx++) {
+            if (child_pos[child_idx].first <= levels.back())
+                new_pos.push_back({var_id_to_level[child_pos[child_idx].first], child_pos[child_idx].second});
         }
+        result_relation_.push_back(new_pos);
+    }
 
-        for (auto& ancestor : group.ancestors)
-            var_result_offset.push_back(var_id_to_level[ancestor[0]]);
+    for (auto& ancestor : group.ancestors)
+        var_result_offset.push_back(var_id_to_level[ancestor[0]]);
 
-        uint size = result_map_[0]->begin()->second->size();
-        for (uint i = 1; i < result_map.size(); i++)
-            size += result_map[i].size();
-        results_ = std::vector<std::vector<uint>>();
-        results_.reserve((size > 100000) ? 100000 : size);
+    uint size = result_map_[0]->begin()->second->size();
+    for (uint i = 1; i < result_map.size(); i++)
+        size += result_map[i].size();
+    results_ = std::vector<std::vector<uint>>();
+    results_.reserve((size > 100000) ? 100000 : size);
 
-        current_result_ = std::vector<uint>(levels.size(), 0);
-        candidate_value_ = std::vector<std::vector<uint>*>();
-        for (uint i = 0; i < result_map.size(); i++)
-            candidate_value_.push_back(new std::vector<uint>());
-        candidate_idx_ = std::vector<uint>(result_map.size(), 0);
+    current_result_ = std::vector<uint>(levels.size(), 0);
+    candidate_value_ = std::vector<std::vector<uint>*>();
+    for (uint i = 0; i < result_map.size(); i++)
+        candidate_value_.push_back(new std::vector<uint>());
+    candidate_idx_ = std::vector<uint>(result_map.size(), 0);
 
-        int map_size = result_map_.size();
-        while (true) {
-            if (at_end_) {
-                if (level_ == 0)
-                    break;
-                Up();
+    int map_size = result_map_.size();
+    while (true) {
+        if (at_end_) {
+            if (level_ == 0)
+                break;
+            Up();
+            Next();
+        } else {
+            if (level_ == map_size - 1) {
+                results_.push_back(current_result_);
                 Next();
             } else {
-                if (level_ == map_size - 1) {
-                    results_.push_back(current_result_);
-                    Next();
-                } else {
-                    Down();
-                }
+                Down();
             }
         }
+        // }
     }
 }
 
@@ -159,15 +173,17 @@ VariableGroup::VariableGroup(ResultMap& map, Group group) {
 
     std::vector<uint> all_values;
     all_values.reserve(est_size * 2);
+    phmap::flat_hash_set<uint> unique_values;
+    unique_values.reserve(est_size * 2);
+
     for (auto& [_, set] : map)
-        all_values.insert(all_values.end(), set->begin(), set->end());
+        for (uint value : *set)
+            if (unique_values.insert(value).second)
+                all_values.push_back(value);
 
-    std::sort(std::execution::par_unseq, all_values.begin(), all_values.end());
-    all_values.erase(std::unique(all_values.begin(), all_values.end()), all_values.end());
-
-    results_ = std::vector<std::vector<uint>>(all_values.size(), std::vector<uint>(1));
-    for (uint i = 0; i < all_values.size(); i++)
-        results_[i][0] = all_values[i];
+    results_.resize(all_values.size());
+    std::transform(std::execution::par_unseq, all_values.begin(), all_values.end(), results_.begin(),
+                   [](uint value) { return std::vector<uint>{value}; });
 }
 
 VariableGroup::VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group group) {
@@ -177,14 +193,19 @@ VariableGroup::VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group 
     var_result_offset.push_back(0);
 
     std::vector<uint>* all_values = map.begin()->second;
-    uint end = range.second > all_values->size() ? all_values->size() : range.second;
+    uint end_pos = range.second > all_values->size() ? all_values->size() : range.second;
 
-    results_ = std::vector<std::vector<uint>>(end - range.first, std::vector<uint>(1));
-    uint idx = 0;
+    uint total = (end_pos > range.first) ? end_pos - range.first : 0;
+    results_.resize(total);
 
-    for (uint i = range.first; i < end; i++) {
-        results_[idx][0] = all_values->at(i);
-        idx++;
+    if (total > 0) {
+        auto start_it = all_values->cbegin() + range.first;
+        auto end_it = all_values->cbegin() + end_pos;
+
+        std::transform(std::execution::par_unseq, start_it, end_it, results_.begin(),
+                       [](uint value) { return std::vector<uint>{value}; });
+    } else {
+        results_.clear();
     }
 }
 

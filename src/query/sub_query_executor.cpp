@@ -2,6 +2,7 @@
 #include <unordered_set>
 
 #include <random>
+#include <thread>
 #include "avpjoin/query/sub_query_executor.hpp"
 #include "avpjoin/utils/disjoint_set_union.hpp"
 
@@ -76,7 +77,7 @@ std::string SubQueryExecutor::NextVarieble() {
 
     std::string next_variable = top_candidates.back();
 
-    // std::cout << next_variable << std::endl;
+    std::cout << next_variable << std::endl;
     return next_variable;
 }
 
@@ -583,9 +584,11 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
         } else {
             std::vector<uint> ancestor = group.ancestors.front();
             if (ancestor.size()) {
-                if (ancestor.front() != 0)
+                if (ancestor.front() != 0) {
+                    // variable_groups.push_back(
+                    //     new VariableGroup(result_map_, first_variable_range_, result_relation_, group));
                     variable_groups.push_back(new VariableGroup(result_map_[ancestor.front()], group));
-                else {
+                } else {
                     variable_groups.push_back(
                         new VariableGroup(result_map_[ancestor.front()], first_variable_range_, group));
                 }
@@ -729,11 +732,11 @@ void SubQueryExecutor::Query() {
 
         while (!query_end()) {
             std::string next_variable = NextVarieble();
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(next_variable);
-            // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
-            // std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
-            //           << std::endl;
+            std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
+            std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
+                      << std::endl;
         }
         Reset();
     }
@@ -787,45 +790,69 @@ SubQueryExecutor::~SubQueryExecutor() {
     if (zero_result_)
         return;
 
+    constexpr size_t kParallelCleanupThreshold = 4096;
+    std::vector<ResultMap::mapped_type*> cleanup_buffer;
+
     for (auto& map : result_map_) {
         if (map.empty())
             continue;
 
-        uint total = map.size();
-        uint chunk_size = (total + max_threads_ - 1) / max_threads_;
+        cleanup_buffer.clear();
 
-        std::vector<std::pair<ResultMap::iterator, ResultMap::iterator>> ranges;
-        ranges.reserve(max_threads_);
-
-        auto it = map.begin();
-        for (uint t = 0; t < max_threads_; ++t) {
-            auto start_it = it;
-            uint remaining = (t * chunk_size >= total) ? 0 : std::min(chunk_size, total - t * chunk_size);
-            for (uint s = 0; s < remaining && it != map.end(); ++s)
-                ++it;
-            auto end_it = it;
-            if (start_it != end_it)
-                ranges.emplace_back(start_it, end_it);
+        const size_t map_size = map.size();
+        if (max_threads_ <= 1 || map_size < kParallelCleanupThreshold) {
+            for (auto& entry : map) {
+                delete entry.second;
+                entry.second = nullptr;
+            }
+            map.clear();
+            continue;
         }
 
-        auto worker = [](ResultMap* m, ResultMap::iterator b, ResultMap::iterator e) {
-            for (auto itr = b; itr != e; ++itr) {
-                delete itr->second;
-                itr->second = nullptr;
+        cleanup_buffer.reserve(map_size);
+        for (auto& entry : map)
+            cleanup_buffer.push_back(&entry.second);
+
+        const size_t value_count = cleanup_buffer.size();
+        size_t thread_count = static_cast<size_t>(max_threads_);
+        if (thread_count <= 1 || value_count <= 1) {
+            for (auto* value_ptr : cleanup_buffer) {
+                auto& ptr = *value_ptr;
+                delete ptr;
+                ptr = nullptr;
+            }
+            map.clear();
+            continue;
+        }
+
+        thread_count = std::min(thread_count, value_count);
+        const size_t chunk_size = (value_count + thread_count - 1) / thread_count;
+
+        auto delete_range = [&cleanup_buffer](size_t begin, size_t end) {
+            for (size_t idx = begin; idx < end; ++idx) {
+                auto& ptr = *cleanup_buffer[idx];
+                delete ptr;
+                ptr = nullptr;
             }
         };
 
         std::vector<std::thread> threads;
-        threads.reserve(ranges.size());
-        for (auto& r : ranges) {
-            threads.emplace_back(worker, &map, r.first, r.second);
+        threads.reserve(thread_count);
+
+        size_t begin_index = 0;
+        for (size_t t = 0; t < thread_count && begin_index < value_count; ++t) {
+            size_t end_index = std::min(value_count, begin_index + chunk_size);
+            threads.emplace_back(delete_range, begin_index, end_index);
+            begin_index = end_index;
         }
 
         for (auto& thread : threads) {
             if (thread.joinable())
                 thread.join();
         }
+
         map.clear();
+        cleanup_buffer.clear();
     }
 
     result_relation_.clear();

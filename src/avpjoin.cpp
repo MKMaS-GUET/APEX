@@ -25,6 +25,8 @@ void AVPJoin::Create(const std::string& db_name, const std::string& data_file) {
 void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
+        // double traverse_time = 0;
+        // double gen_result_time = 0;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
         std::ifstream in(query_path, std::ifstream::in);
         std::vector<std::string> sparqls;
@@ -56,11 +58,14 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            double query_time = executor.execute_cost() + executor.build_group_cost() / (max_threads / 6.0) + 1.0 +
-                                executor.gen_result_cost();
+            double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
             std::cout << "query takes " << query_time << " ms." << std::endl;
+            // traverse_time += executor.build_group_cost();
+            // gen_result_time += executor.gen_result_cost();
             total_time += query_time;
         }
+        // std::cout << "avg traverse time: " << traverse_time / sparqls.size() << " ms." << std::endl;
+        // std::cout << "avg gen result time: " << gen_result_time / sparqls.size() << " ms." << std::endl;
         std::cout << "avg query time: " << total_time / sparqls.size() << " ms." << std::endl;
         exit(0);
     }
@@ -137,8 +142,7 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            double query_time = executor.execute_cost() + executor.build_group_cost() / (max_threads / 6.0) + 1.0 +
-                                executor.gen_result_cost();
+            double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
 
             std::cout << "query takes " << query_time << " ms." << std::endl;
 
