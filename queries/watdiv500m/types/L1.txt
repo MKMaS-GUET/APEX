@@ -1,0 +1,5 @@
+SELECT ?v0 ?v2 ?v3 WHERE { ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> <http://db.uwaterloo.ca/~galuc/wsdbm/Website148083> . ?v2 <http://schema.org/caption> ?v3 . ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 . }
+SELECT ?v0 ?v2 ?v3 WHERE { ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> <http://db.uwaterloo.ca/~galuc/wsdbm/Website223220> . ?v2 <http://schema.org/caption> ?v3 . ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 . }
+SELECT ?v0 ?v2 ?v3 WHERE { ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> <http://db.uwaterloo.ca/~galuc/wsdbm/Website166243> . ?v2 <http://schema.org/caption> ?v3 . ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 . }
+SELECT ?v0 ?v2 ?v3 WHERE { ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> <http://db.uwaterloo.ca/~galuc/wsdbm/Website85948> . ?v2 <http://schema.org/caption> ?v3 . ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 . }
+SELECT ?v0 ?v2 ?v3 WHERE { ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> <http://db.uwaterloo.ca/~galuc/wsdbm/Website159229> . ?v2 <http://schema.org/caption> ?v3 . ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 . }

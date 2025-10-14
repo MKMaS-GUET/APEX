@@ -1,0 +1,10 @@
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P2188> ?y . ?x <http://www.wikidata.org/prop/direct/P1038> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P2581> ?y . ?x <http://www.wikidata.org/prop/direct/P2267> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P5391> ?y . ?x <http://www.wikidata.org/prop/direct/P3018> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P4141> ?y . ?x <http://www.wikidata.org/prop/direct/P1366> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P5607> ?y . ?x <http://www.wikidata.org/prop/direct/P910> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P2750> ?y . ?x <http://www.wikidata.org/prop/direct/P51> ?z } 
+SELECT * WHERE { ?x <http://wikiba.se/ontology-beta#novalue> ?y . ?x <http://wikiba.se/ontology-beta#directClaim> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P3957> ?y . ?x <http://www.wikidata.org/prop/direct/P4198> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P461> ?y . ?x <http://www.wikidata.org/prop/direct/P155> ?z } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P1764> ?y . ?x <http://www.wikidata.org/prop/direct/P708> ?z } 

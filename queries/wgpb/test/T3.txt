@@ -1,0 +1,10 @@
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P2750> ?y . ?x <http://www.wikidata.org/prop/direct/P1299> ?z . ?x <http://www.wikidata.org/prop/direct/P2268> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P20> ?y . ?x <http://www.wikidata.org/prop/direct/P1942> ?z . ?x <http://www.wikidata.org/prop/direct/P2013> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P3936> ?y . ?x <http://www.wikidata.org/prop/direct/P3940> ?z . ?x <http://www.wikidata.org/prop/direct-normalized/P227> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P2359> ?y . ?x <http://www.wikidata.org/prop/direct/P3222> ?z . ?x <http://www.wikidata.org/prop/direct/P4629> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P2040> ?y . ?x <http://www.wikidata.org/prop/direct/P4807> ?z . ?x <http://www.wikidata.org/prop/direct/P1403> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P1989> ?y . ?x <http://www.wikidata.org/prop/direct/P2003> ?z . ?x <http://www.wikidata.org/prop/direct/P244> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P5800> ?y . ?x <http://www.wikidata.org/prop/direct/P26> ?z . ?x <http://www.wikidata.org/prop/direct/P512> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P1045> ?y . ?x <http://www.wikidata.org/prop/direct/P2383> ?z . ?x <http://www.wikidata.org/prop/direct/P4223> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P1093> ?y . ?x <http://www.wikidata.org/prop/direct/P2980> ?z . ?x <http://www.wikidata.org/prop/direct-normalized/P227> ?u } 
+SELECT * WHERE { ?x <http://www.wikidata.org/prop/direct/P1651> ?y . ?x <http://www.wikidata.org/prop/direct/P553> ?z . ?x <http://www.wikidata.org/prop/direct/P856> ?u } 
