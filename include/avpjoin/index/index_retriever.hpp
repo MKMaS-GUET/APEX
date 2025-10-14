@@ -58,7 +58,7 @@ class IndexRetriever {
      * @brief Constructor for IndexRetriever with a database name.
      * @param db_name The name of the database.
      */
-    IndexRetriever(std::string db_name);
+    IndexRetriever(std::string db_name, bool print);
 
     /**
      * @brief Closes the index retriever and releases resources.

@@ -62,7 +62,8 @@ class SubQueryExecutor {
                      const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
                      bool is_cycle,
                      uint limit,
-                     bool use_order_generator, uint max_threads);
+                     bool use_order_generator,
+                     uint max_threads);
 
     ~SubQueryExecutor();
 

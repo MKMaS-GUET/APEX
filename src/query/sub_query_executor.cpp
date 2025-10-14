@@ -77,7 +77,7 @@ std::string SubQueryExecutor::NextVarieble() {
 
     std::string next_variable = top_candidates.back();
 
-    std::cout << next_variable << std::endl;
+    // std::cout << next_variable << std::endl;
     return next_variable;
 }
 
@@ -586,7 +586,7 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
             if (ancestor.size()) {
                 if (ancestor.front() != 0) {
                     // variable_groups.push_back(
-                    //     new VariableGroup(result_map_, first_variable_range_, result_relation_, group));
+                    // new VariableGroup(result_map_, first_variable_range_, result_relation_, group));
                     variable_groups.push_back(new VariableGroup(result_map_[ancestor.front()], group));
                 } else {
                     variable_groups.push_back(
@@ -731,7 +731,7 @@ void SubQueryExecutor::Query() {
             break;
 
         while (!query_end()) {
-            std::string next_variable = NextVarieble();
+            std::string next_variable = NextVagitrieble();
             auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(next_variable);
             std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
@@ -742,6 +742,24 @@ void SubQueryExecutor::Query() {
     }
 
     PostProcess();
+
+    // for (const auto& rm : result_map_) {
+    //     // 哈希表自身开销（估算）
+    //     size += sizeof(rm) + rm.bucket_count() * (sizeof(void*) + sizeof(std::mutex));
+
+    //     for (const auto& [key, val_ptr] : rm) {
+    //         // key 内存
+    //         size += sizeof(key) + key.capacity() * sizeof(uint);
+
+    //         // value 指针本身占用
+    //         size += sizeof(val_ptr);
+
+    //         // value 指向的 vector 内存（如果非空）
+    //         if (val_ptr) {
+    //             size += sizeof(*val_ptr) + val_ptr->capacity() * sizeof(uint);
+    //         }
+    //     }
+    // }
 }
 
 void SubQueryExecutor::PostProcess() {

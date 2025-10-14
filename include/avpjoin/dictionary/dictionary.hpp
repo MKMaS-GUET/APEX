@@ -100,7 +100,7 @@ class Dictionary {
    public:
     Dictionary();
 
-    Dictionary(std::string& dict_path_);
+    Dictionary(std::string& dict_path_, bool print);
 
     void Close();
 

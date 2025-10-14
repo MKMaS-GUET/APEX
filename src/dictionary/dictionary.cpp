@@ -16,7 +16,7 @@ bool Dictionary::LoadPredicate(std::vector<std::string>& id2predicate, hash_map<
 
 Dictionary::Dictionary() {}
 
-Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
+Dictionary::Dictionary(std::string& dict_path, bool print) : dict_path_(dict_path) {
     std::string file_path = dict_path_ + "/subjects/hash2id";
     subject_hashes_ = MMap<std::size_t>(file_path);
     subject_ids_ = MMap<uint>(file_path);
@@ -37,19 +37,22 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
     LoadPredicate(id2predicate_, predicate2id_);
 
-    auto process_id2entity = [&](ulong type, std::string file_name, std::variant<Node<uint>, Node<ulong>>& id2entity) {
-        if (type == 32)
-            id2entity = Node<uint>(dict_path_ + file_name);
-        else
-            id2entity = Node<ulong>(dict_path_ + file_name);
-    };
+    if (print) {
+        auto process_id2entity = [&](ulong type, std::string file_name,
+                                     std::variant<Node<uint>, Node<ulong>>& id2entity) {
+            if (type == 32)
+                id2entity = Node<uint>(dict_path_ + file_name);
+            else
+                id2entity = Node<ulong>(dict_path_ + file_name);
+        };
 
-    std::thread t1([&]() { process_id2entity(menagement_data[4], "/subjects/", id2subject_); });
-    std::thread t2([&]() { process_id2entity(menagement_data[5], "/objects/", id2object_); });
-    std::thread t3([&]() { process_id2entity(menagement_data[6], "/shared/", id2shared_); });
-    t1.join();
-    t2.join();
-    t3.join();
+        std::thread t1([&]() { process_id2entity(menagement_data[4], "/subjects/", id2subject_); });
+        std::thread t2([&]() { process_id2entity(menagement_data[5], "/objects/", id2object_); });
+        std::thread t3([&]() { process_id2entity(menagement_data[6], "/shared/", id2shared_); });
+        t1.join();
+        t2.join();
+        t3.join();
+    }
 
     // auto build_cache = [&](uint beg, uint end) {
     //     for (uint id = beg; id <= end; id += 1000) {

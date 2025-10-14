@@ -145,7 +145,7 @@ bool IndexBuilder::Build() {
     dict_builder.Build();
     dict_builder.EncodeRDF(*pso_);
     dict_builder.Close();
-    dict_ = Dictionary(db_dictionary_path_);
+    dict_ = Dictionary(db_dictionary_path_, true);
     dict_.Close();
     malloc_trim(0);
 

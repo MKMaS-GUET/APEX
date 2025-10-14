@@ -27,7 +27,8 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
         double total_time = 0;
         // double traverse_time = 0;
         // double gen_result_time = 0;
-        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
+        bool print = false;
+        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
         std::ifstream in(query_path, std::ifstream::in);
         std::vector<std::string> sparqls;
         if (in.is_open()) {
@@ -51,10 +52,9 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
             SPARQLParser parser = SPARQLParser(sparql);
             QueryExecutor executor = QueryExecutor(index, parser, max_threads);
             executor.Query();
-            uint result_count = executor.PrintResult();
+            uint result_count = executor.PrintResult(print);
 
             std::cout << result_count << " result(s)." << std::endl;
-            // std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
@@ -64,6 +64,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
             // gen_result_time += executor.gen_result_cost();
             total_time += query_time;
         }
+        // std::cout << "Approx memory used: " << size / sparqls.size() / (1024.0 * 1024.0) << " MB\n";
         // std::cout << "avg traverse time: " << traverse_time / sparqls.size() << " ms." << std::endl;
         // std::cout << "avg gen result time: " << gen_result_time / sparqls.size() << " ms." << std::endl;
         std::cout << "avg query time: " << total_time / sparqls.size() << " ms." << std::endl;
@@ -73,7 +74,8 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
 
 void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
-        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
+        bool print = false;
+        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
         std::ifstream in(query_path, std::ifstream::in);
         std::vector<std::string> sparqls;
         if (in.is_open()) {
@@ -83,7 +85,6 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
                 sparqls.push_back(sparql);
             in.close();
         }
-
         UDPService service = UDPService(2077, 2078);
         service.sendMessage(std::to_string(index->predicate_cnt()));
 
@@ -108,7 +109,8 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
 void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
-        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
+        bool print = false;
+        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
         std::ifstream in(query_path, std::ifstream::in);
         std::vector<std::string> sparqls;
         if (in.is_open()) {
@@ -134,11 +136,9 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
             SPARQLParser parser = SPARQLParser(sparql);
             QueryExecutor executor = QueryExecutor(index, parser, max_threads);
             executor.Test(service);
-            uint result_count = executor.PrintResult();
+            uint result_count = executor.PrintResult(false);
 
             std::cout << result_count << " result(s)." << std::endl;
-            // std::cout << "preprocess takes " << executor.preprocess_cost() << " ms." << std::endl;
-            // std::cout << "gen plan cost takes " << executor.gen_plan_cost() << " ms." << std::endl;
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;

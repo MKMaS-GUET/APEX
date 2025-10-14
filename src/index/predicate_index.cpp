@@ -53,12 +53,15 @@ PredicateIndex::PredicateIndex(std::string file_path, uint max_predicate_id, boo
     std::sort(o_sizes.begin(), o_sizes.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
 
     if (!in_memory_) {
-        uint cnt = 0;
-        for (auto it = s_sizes.begin(); it != s_sizes.end() && cnt < 5; ++it, cnt++)
-            GetSSet(it->second);
-        cnt = 0;
-        for (auto it = o_sizes.begin(); it != o_sizes.end() && cnt < 5; ++it, cnt++)
-            GetOSet(it->second);
+        if (true) {
+            uint cnt = 0;
+            for (auto it = s_sizes.begin(); it != s_sizes.end() && cnt < 5; ++it, cnt++)
+                GetSSet(it->second);
+            cnt = 0;
+            for (auto it = o_sizes.begin(); it != o_sizes.end() && cnt < 5; ++it, cnt++)
+                GetOSet(it->second);
+        }
+
     } else {
         for (auto it = s_sizes.begin(); it != s_sizes.end(); ++it)
             GetSSet(it->second);

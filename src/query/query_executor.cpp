@@ -196,6 +196,7 @@ void QueryExecutor::Query() {
             zero_result_ = true;
             return;
         }
+        // size += executor->size;
         if (total_limit != __UINT32_MAX__) {
             total_limit = (total_limit + count - 1) / count;
             if (total_limit < 1)
@@ -310,7 +311,7 @@ void QueryExecutor::Test(UDPService& service) {
     }
 }
 
-uint QueryExecutor::PrintResult() {
+uint QueryExecutor::PrintResult(bool print) {
     if (zero_result_)
         return 0;
 
@@ -344,9 +345,11 @@ uint QueryExecutor::PrintResult() {
         ends.push_back(end);
     }
 
-    for (uint i = 0; i < var_print_order.size(); i++)
-        std::cout << var_print_order[i] << " ";
-    std::cout << std::endl;
+    if (print) {
+        for (uint i = 0; i < var_print_order.size(); i++)
+            std::cout << var_print_order[i] << " ";
+        std::cout << std::endl;
+    }
 
     uint limit = parser_.Limit();
     uint count = 0;
@@ -362,9 +365,11 @@ uint QueryExecutor::PrintResult() {
         }
 
         // 输出结果
-        for (const auto& [index, pos] : var_priority_position)
-            std::cout << index_->ID2String(result_row[index], pos) << " ";
-        std::cout << std::endl;
+        if (print) {
+            for (const auto& [index, pos] : var_priority_position)
+                std::cout << index_->ID2String(result_row[index], pos) << " ";
+            std::cout << std::endl;
+        }
 
         if (++count >= limit)
             break;

@@ -6,14 +6,14 @@
 
 IndexRetriever::IndexRetriever() {}
 
-IndexRetriever::IndexRetriever(std::string db_name) : db_path_(db_name) {
+IndexRetriever::IndexRetriever(std::string db_name, bool print) : db_path_(db_name) {
     db_dictionary_path_ = db_path_ + "/dictionary/";
     db_index_path_ = db_path_ + "/index/";
     spo_index_path_ = db_index_path_ + "spo/";
     ops_index_path_ = db_index_path_ + "ops/";
 
     auto beg = std::chrono::high_resolution_clock::now();
-    dict_ = Dictionary(db_dictionary_path_);
+    dict_ = Dictionary(db_dictionary_path_, print);
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> diff = end - beg;
 

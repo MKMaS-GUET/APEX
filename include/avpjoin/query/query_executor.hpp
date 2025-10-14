@@ -37,7 +37,7 @@ class QueryExecutor {
 
     void Test(UDPService& service);
 
-    uint PrintResult();
+    uint PrintResult(bool print);
 
     double preprocess_cost();
 
