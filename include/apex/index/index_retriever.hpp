@@ -8,12 +8,12 @@
 #include <thread>
 #include <vector>
 
-#include "avpjoin/dictionary/dictionary.hpp"
-#include "avpjoin/index/characteristic_set.hpp"
-#include "avpjoin/index/cs_daa_map.hpp"
-#include "avpjoin/index/daas.hpp"
-#include "avpjoin/index/new_predicate_index.hpp"
-#include "avpjoin/index/predicate_index.hpp"
+#include "apex/dictionary/dictionary.hpp"
+#include "apex/index/characteristic_set.hpp"
+#include "apex/index/cs_daa_map.hpp"
+#include "apex/index/daas.hpp"
+#include "apex/index/new_predicate_index.hpp"
+#include "apex/index/predicate_index.hpp"
 
 /**
  * @class IndexRetriever

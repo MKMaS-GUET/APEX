@@ -11,9 +11,9 @@
 #include <variant>
 #include <vector>
 
-#include "avpjoin/parser/sparql_parser.hpp"
-#include "avpjoin/utils/mmap.hpp"
-#include "avpjoin/utils/vbyte.hpp"
+#include "apex/parser/sparql_parser.hpp"
+#include "apex/utils/mmap.hpp"
+#include "apex/utils/vbyte.hpp"
 
 template <typename Key, typename Value>
 using hash_map = phmap::flat_hash_map<Key, Value>;

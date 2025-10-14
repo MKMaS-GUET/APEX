@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "avpjoin/index/index_retriever.hpp"
-#include "avpjoin/utils/join_list.hpp"
+#include "apex/index/index_retriever.hpp"
+#include "apex/utils/join_list.hpp"
 #include "result_generator.hpp"
 #include "variable_group.hpp"
 

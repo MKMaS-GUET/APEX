@@ -2,8 +2,8 @@
 #include <cmath>
 #include <iostream>
 
-#include "avpjoin/index/daas.hpp"
-#include "avpjoin/utils/bit_operations.hpp"
+#include "apex/index/daas.hpp"
+#include "apex/utils/bit_operations.hpp"
 
 DAAs::Structure::Structure(std::vector<std::vector<uint>>& arrays) {
     create(arrays);

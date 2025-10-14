@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "avpjoin/parser/sparql_lexer.hpp"
+#include "apex/parser/sparql_lexer.hpp"
 
 class SPARQLParser {
    public:

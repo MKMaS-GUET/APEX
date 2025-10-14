@@ -3,8 +3,8 @@
 
 #include <vector>
 
-#include "avpjoin/parser/sparql_parser.hpp"
-#include "avpjoin/utils/udp_service.hpp"
+#include "apex/parser/sparql_parser.hpp"
+#include "apex/utils/udp_service.hpp"
 #include "sub_query_executor.hpp"
 
 class QueryExecutor {

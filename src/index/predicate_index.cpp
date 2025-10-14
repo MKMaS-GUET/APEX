@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "avpjoin/index/predicate_index.hpp"
+#include "apex/index/predicate_index.hpp"
 #include "streamvbyte.h"
 
 void PredicateIndex::Index::Build(std::vector<std::pair<uint, uint>>& so_pairs) {

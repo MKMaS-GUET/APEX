@@ -3,7 +3,7 @@
 
 #include <parallel_hashmap/phmap.h>
 
-#include "avpjoin/parser/sparql_parser.hpp"
+#include "apex/parser/sparql_parser.hpp"
 
 using Position = SPARQLParser::Term::Position;
 

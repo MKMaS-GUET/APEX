@@ -12,10 +12,10 @@
 #include <string>
 #include <vector>
 
-#include "avpjoin/dictionary/dictionary.hpp"
-#include "avpjoin/index/daas.hpp"
-#include "avpjoin/index/new_predicate_index.hpp"
-#include "avpjoin/index/predicate_index.hpp"
+#include "apex/dictionary/dictionary.hpp"
+#include "apex/index/daas.hpp"
+#include "apex/index/new_predicate_index.hpp"
+#include "apex/index/predicate_index.hpp"
 
 namespace fs = std::filesystem;
 

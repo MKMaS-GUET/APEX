@@ -1,4 +1,4 @@
-#include "avpjoin/parser/sparql_lexer.hpp"
+#include "apex/parser/sparql_lexer.hpp"
 
 SPARQLLexer::SPARQLLexer(std::string raw_sparql_string)
     : raw_sparql_string_(std::move(raw_sparql_string)),

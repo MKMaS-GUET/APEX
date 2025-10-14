@@ -3,8 +3,8 @@
 #include <cmath>
 #include <iostream>
 
-#include "avpjoin/index/cs_daa_map.hpp"
-#include "avpjoin/utils/bit_operations.hpp"
+#include "apex/index/cs_daa_map.hpp"
+#include "apex/utils/bit_operations.hpp"
 
 CsDaaMap::CsDaaMap(std::string file_path) : file_path_(file_path) {
     cs_id_width_ = std::pair<uint, uint>(0, 0);

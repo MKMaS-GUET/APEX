@@ -1,5 +1,5 @@
-#include "avpjoin/query/result_generator.hpp"
-#include "avpjoin/query/result_map_iterator.hpp"
+#include "apex/query/result_generator.hpp"
+#include "apex/query/result_map_iterator.hpp"
 
 ResultGenerator::ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
                                  uint limit,

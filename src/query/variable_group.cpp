@@ -1,4 +1,4 @@
-#include "avpjoin/query/variable_group.hpp"
+#include "apex/query/variable_group.hpp"
 
 #include <execution>
 #include <iostream>
@@ -46,7 +46,7 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
         std::sort(levels.begin(), levels.end());
     } else {
         for (uint i = 0; i < result_map.size(); i++) {
-            if (result_map[i].size()) 
+            if (result_map[i].size())
                 levels.push_back(i);
         }
     }

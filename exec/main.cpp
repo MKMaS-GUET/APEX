@@ -1,11 +1,11 @@
-#include <avpjoin/avpjoin.hpp>
+#include <apex/apex.hpp>
 
 #include "exec/args_parser.hpp"
 
 void Build(const std::unordered_map<std::string, std::string>& arguments) {
     std::string db_name = arguments.at("path");
     std::string data_file = arguments.at("file");
-    avpjoin::AVPJoin::Create(db_name, data_file);
+    apex::APEX::Create(db_name, data_file);
 }
 
 void Query(const std::unordered_map<std::string, std::string>& arguments) {
@@ -20,7 +20,7 @@ void Query(const std::unordered_map<std::string, std::string>& arguments) {
     if (arguments.count("file"))
         query_path = arguments.at("file");
 
-    avpjoin::AVPJoin::Query(db_path, query_path);
+    apex::APEX::Query(db_path, query_path);
 }
 
 void Train(const std::unordered_map<std::string, std::string>& arguments) {
@@ -35,7 +35,7 @@ void Train(const std::unordered_map<std::string, std::string>& arguments) {
     if (arguments.count("file"))
         query_path = arguments.at("file");
 
-    avpjoin::AVPJoin::Train(db_path, query_path);
+    apex::APEX::Train(db_path, query_path);
 }
 
 void Test(const std::unordered_map<std::string, std::string>& arguments) {
@@ -49,7 +49,7 @@ void Test(const std::unordered_map<std::string, std::string>& arguments) {
     if (arguments.count("file"))
         query_path = arguments.at("file");
 
-    avpjoin::AVPJoin::Test(db_path, query_path);
+    apex::APEX::Test(db_path, query_path);
 }
 
 struct EnumClassHash {

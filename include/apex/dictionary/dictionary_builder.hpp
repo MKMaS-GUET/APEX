@@ -7,7 +7,7 @@
 #include <iostream>
 #include <thread>
 
-#include "avpjoin/utils/mmap.hpp"
+#include "apex/utils/mmap.hpp"
 
 template <typename Key, typename Value>
 using hash_map = phmap::flat_hash_map<Key, Value>;

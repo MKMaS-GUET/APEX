@@ -1,7 +1,7 @@
-set(this avpjoin_lib)
+set(this apex_lib)
 
 file(GLOB_RECURSE srcs CONFIGURE_DEPENDS
-        avpjoin.cpp
+        apex.cpp
         server/*.cpp
         parser/*.cpp
         index/*.cpp

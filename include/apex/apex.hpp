@@ -1,26 +1,26 @@
-#ifndef AVPJOIN_HPP
-#define AVPJOIN_HPP
+#ifndef APEX_HPP
+#define APEX_HPP
 
 #include <string>
 #include <vector>
 
-namespace avpjoin {
+namespace apex {
 
-class AVPJoin {
+class APEX {
    public:
-    AVPJoin() = delete;
+    APEX() = delete;
 
-    ~AVPJoin() = delete;
+    ~APEX() = delete;
 
     static void Create(const std::string& db_name, const std::string& data_file);
 
     static void Query(const std::string& db_path, const std::string& data_file);
 
     static void Train(const std::string& db_path, const std::string& query_path);
-    
+
     static void Test(const std::string& db_path, const std::string& query_path);
 };
 
-}  // namespace avpjoin
+}  // namespace apex
 
 #endif

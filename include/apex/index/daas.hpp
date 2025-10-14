@@ -5,9 +5,9 @@
 #include <span>
 #include <vector>
 
-#include "avpjoin/index/characteristic_set.hpp"
-#include "avpjoin/index/predicate_index.hpp"
-#include "avpjoin/utils/mmap.hpp"
+#include "apex/index/characteristic_set.hpp"
+#include "apex/index/predicate_index.hpp"
+#include "apex/utils/mmap.hpp"
 
 class DAAs {
    public:

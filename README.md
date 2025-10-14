@@ -1,1 +1,1 @@
-# AVPJoin: Adaptive Variable-wise Parallel Execution for Worst-Case Optimal Joins
+# APEX: daptive Variable-wise Parallel Execution for Worst-Case Optimal Joins on Graph Queries

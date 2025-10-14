@@ -1,7 +1,7 @@
 #ifndef RESULT_GENERATOR_HPP
 #define RESULT_GENERATOR_HPP
 
-#include "avpjoin/index/index_retriever.hpp"
+#include "apex/index/index_retriever.hpp"
 #include "pre_processor.hpp"
 #include "result_map.hpp"
 

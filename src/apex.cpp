@@ -1,14 +1,14 @@
-#include <avpjoin/avpjoin.hpp>
+#include <apex/apex.hpp>
 
-#include "avpjoin/index/index_builder.hpp"
-#include "avpjoin/index/index_retriever.hpp"
-#include "avpjoin/query/query_executor.hpp"
-#include "avpjoin/query/sub_query_executor.hpp"
-#include "avpjoin/utils/udp_service.hpp"
+#include "apex/index/index_builder.hpp"
+#include "apex/index/index_retriever.hpp"
+#include "apex/query/query_executor.hpp"
+#include "apex/query/sub_query_executor.hpp"
+#include "apex/utils/udp_service.hpp"
 
-namespace avpjoin {
+namespace apex {
 
-void AVPJoin::Create(const std::string& db_name, const std::string& data_file) {
+void APEX::Create(const std::string& db_name, const std::string& data_file) {
     auto beg = std::chrono::high_resolution_clock::now();
 
     IndexBuilder builder(db_name, data_file);
@@ -22,7 +22,7 @@ void AVPJoin::Create(const std::string& db_name, const std::string& data_file) {
     std::cout << "create " << db_name << " takes " << diff.count() << " ms." << std::endl;
 }
 
-void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
+void APEX::Query(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         // double traverse_time = 0;
@@ -72,7 +72,7 @@ void AVPJoin::Query(const std::string& db_path, const std::string& query_path) {
     }
 }
 
-void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
+void APEX::Train(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         bool print = false;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
@@ -106,7 +106,7 @@ void AVPJoin::Train(const std::string& db_path, const std::string& query_path) {
     }
 }
 
-void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
+void APEX::Test(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         bool print = false;
@@ -153,4 +153,4 @@ void AVPJoin::Test(const std::string& db_path, const std::string& query_path) {
     }
 }
 
-}  // namespace avpjoin
+}  // namespace apex

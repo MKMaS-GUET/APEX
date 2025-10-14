@@ -3,8 +3,8 @@
 
 #include <random>
 #include <thread>
-#include "avpjoin/query/sub_query_executor.hpp"
-#include "avpjoin/utils/disjoint_set_union.hpp"
+#include "apex/query/sub_query_executor.hpp"
+#include "apex/utils/disjoint_set_union.hpp"
 
 SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
                                    const std::vector<SPARQLParser::TriplePattern>& triple_partterns,
@@ -731,7 +731,7 @@ void SubQueryExecutor::Query() {
             break;
 
         while (!query_end()) {
-            std::string next_variable = NextVagitrieble();
+            std::string next_variable = NextVarieble();
             auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(next_variable);
             std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;

@@ -1,4 +1,4 @@
-#include "avpjoin/query/variable.hpp"
+#include "apex/query/variable.hpp"
 
 Variable::Variable()
     : position(SPARQLParser::Term::kShared),
@@ -86,7 +86,7 @@ std::span<uint> Variable::PreRetrieve() {
         if (position == SPARQLParser::Term::kPredicate) {
             if (triple_constant_pos == SPARQLParser::Term::kSubject)
                 pre_retrieve = index_->GetSPreSet(triple_constant_id);
-            if (triple_constant_pos == SPARQLParser::Term::kObject) 
+            if (triple_constant_pos == SPARQLParser::Term::kObject)
                 pre_retrieve = index_->GetOPreSet(triple_constant_id);
         }
         if (position == SPARQLParser::Term::kObject) {

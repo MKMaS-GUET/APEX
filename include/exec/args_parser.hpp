@@ -27,10 +27,9 @@ class ArgsParser {
     const std::string arg_chunk_size_ = "chunk_size";
 
    private:
-    std::unordered_map<std::string, CommandT> position_ = {
-        {"-h", CommandT::kNone},     {"--help", CommandT::kNone}, {"build", CommandT::kBuild},
-        {"query", CommandT::kQuery}, {"train", CommandT::kTrain}, {"test", CommandT::kTest}
-    };
+    std::unordered_map<std::string, CommandT> position_ = {{"-h", CommandT::kNone},     {"--help", CommandT::kNone},
+                                                           {"build", CommandT::kBuild}, {"query", CommandT::kQuery},
+                                                           {"train", CommandT::kTrain}, {"test", CommandT::kTest}};
 
     std::unordered_map<std::string, void (ArgsParser::*)(const std::unordered_map<std::string, std::string>&)>
         selector_ = {{"build", &ArgsParser::Build},
@@ -39,7 +38,7 @@ class ArgsParser {
                      {"test", &ArgsParser::Test}};
 
     const std::string help_info_ =
-        "Usage: avpjoin [COMMAND] [OPTIONS]\n"
+        "Usage: apex [COMMAND] [OPTIONS]\n"
         "\n"
         "Commands:\n"
         "  build      Build an RDF database.\n"
@@ -54,7 +53,7 @@ class ArgsParser {
         "  build\n"
         "    Build an RDF database.\n"
         "\n"
-        "    Usage: avpjoin build [OPTIONS]\n"
+        "    Usage: apex build [OPTIONS]\n"
         "\n"
         "    Options:\n"
         "      -d, --database <PATH>   Specify the path of the database.\n"
@@ -63,7 +62,7 @@ class ArgsParser {
         "  query\n"
         "    Query an RDF database.\n"
         "\n"
-        "    Usage: avpjoin query [OPTIONS]\n"
+        "    Usage: apex query [OPTIONS]\n"
         "\n"
         "    Options:\n"
         "      -d, --database <PATH>   Specify the path of the database.\n"
@@ -72,7 +71,7 @@ class ArgsParser {
         "  train\n"
         "    Train variable order generator.\n"
         "\n"
-        "    Usage: avpjoin train [OPTIONS]\n"
+        "    Usage: apex train [OPTIONS]\n"
         "\n"
         "    Options:\n"
         "      -d, --database <NAME>   Specify the name of the database.\n"

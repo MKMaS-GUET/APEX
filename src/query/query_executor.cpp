@@ -1,7 +1,7 @@
 #include <parallel_hashmap/phmap.h>
 #include <queue>
 
-#include "avpjoin/query/query_executor.hpp"
+#include "apex/query/query_executor.hpp"
 
 QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser, uint max_threads)
     : max_threads_(max_threads), index_(index), parser_(parser) {
