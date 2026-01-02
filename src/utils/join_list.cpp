@@ -120,9 +120,6 @@ bool JoinList::AtEnd(int i) {
 void JoinList::Clear() {
     for (auto& list : need_to_delete_)
         delete list;
-
-    lists_.clear();
-    list_current_pos_.clear();
 }
 
 int JoinList::Size() {

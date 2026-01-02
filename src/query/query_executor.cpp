@@ -187,14 +187,20 @@ QueryExecutor::~QueryExecutor() {
 
 void QueryExecutor::Query() {
     uint total_limit = parser_.Limit();
+    // std::ofstream var_order("var_order", std::ios::app);
     for (auto& sub_query : sub_queries_) {
         auto executor = new SubQueryExecutor(index_, sub_query, is_cycle_, total_limit, false, max_threads_);
         executors_.push_back(executor);
+
         executor->Query();
+
+        // for (auto v : executor->variable_order())
+        //     var_order << v << " ";
+
         uint count = executor->ResultSize();
         if (count == 0) {
             zero_result_ = true;
-            return;
+            break;
         }
         // size += executor->size;
         if (total_limit != __UINT32_MAX__) {
@@ -203,6 +209,8 @@ void QueryExecutor::Query() {
                 total_limit = 1;
         }
     }
+    // var_order << std::endl;
+    // var_order.close();
 }
 
 void QueryExecutor::Train(UDPService& service) {

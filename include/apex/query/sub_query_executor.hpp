@@ -45,11 +45,24 @@ class SubQueryExecutor {
 
     void UpdateStatus(std::string variable, uint result_len);
 
+    std::vector<uint>* ParallelLeapfrogJoin(std::vector<std::span<uint>> lists);
+
     std::vector<uint>* LeapfrogJoin(JoinList& lists);
 
     uint FirstVariableJoin(std::vector<Variable*> vars, ResultMap& result);
 
+    uint JoinWorker(const std::vector<Variable*>& vars,
+                    std::vector<VariableGroup*>& variable_groups,
+                    ResultMap& result,
+                    VariableGroup::iterator begin_it,
+                    VariableGroup::iterator end_it,
+                    uint target_group_idx,
+                    uint var_cnt);
+
     uint ParallelJoin(std::vector<Variable*> vars, std::vector<VariableGroup*> variable_groups, ResultMap& result);
+    uint ParallelJoinWorkStealing(std::vector<Variable*> vars,
+                                  std::vector<VariableGroup*> variable_groups,
+                                  ResultMap& result);
 
     std::vector<VariableGroup::Group> GetVariableGroup();
 

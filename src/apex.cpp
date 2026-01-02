@@ -38,7 +38,6 @@ void APEX::Query(const std::string& db_path, const std::string& query_path) {
                 sparqls.push_back(sparql);
             in.close();
         }
-
         std::ios::sync_with_stdio(false);
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
             std::string sparql = sparqls[i];
