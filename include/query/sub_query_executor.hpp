@@ -7,8 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "apex/index/index_retriever.hpp"
-#include "apex/utils/join_list.hpp"
+#include "index/index_retriever.hpp"
 #include "result_generator.hpp"
 #include "variable_group.hpp"
 
@@ -16,7 +15,7 @@ using Position = SPARQLParser::Term::Position;
 
 class SubQueryExecutor {
    private:
-    uint max_threads_ = 16;
+    uint max_threads_ = 32;
     bool is_cycle_ = false;
     bool zero_result_;
     uint variable_id_;
@@ -45,10 +44,6 @@ class SubQueryExecutor {
 
     void UpdateStatus(std::string variable, uint result_len);
 
-    std::vector<uint>* ParallelLeapfrogJoin(std::vector<std::span<uint>> lists);
-
-    std::vector<uint>* LeapfrogJoin(JoinList& lists);
-
     uint FirstVariableJoin(std::vector<Variable*> vars, ResultMap& result);
 
     uint JoinWorker(const std::vector<Variable*>& vars,
@@ -60,6 +55,7 @@ class SubQueryExecutor {
                     uint var_cnt);
 
     uint ParallelJoin(std::vector<Variable*> vars, std::vector<VariableGroup*> variable_groups, ResultMap& result);
+
     uint ParallelJoinWorkStealing(std::vector<Variable*> vars,
                                   std::vector<VariableGroup*> variable_groups,
                                   ResultMap& result);

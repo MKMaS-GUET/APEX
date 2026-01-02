@@ -1,5 +1,5 @@
-#include "apex/dictionary/dictionary_builder.hpp"
-#include "apex/utils/vbyte.hpp"
+#include "dictionary/dictionary_builder.hpp"
+#include "utils/vbyte.hpp"
 
 DictionaryBuilder::DictionaryBuilder(std::string& dict_path, std::string& file_path)
     : dict_path_(dict_path), file_path_(file_path) {}

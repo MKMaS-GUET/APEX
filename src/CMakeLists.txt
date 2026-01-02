@@ -10,5 +10,10 @@ file(GLOB_RECURSE srcs CONFIGURE_DEPENDS
         utils/*.cpp)
 
 add_library(${this} STATIC ${srcs})
-target_link_libraries(${this} PRIVATE phmap httplib streamvbyte TBB::tbb)
+# phmap is header-only and required by public headers (e.g., index_builder.hpp),
+# so expose it transitively to dependents.
+target_link_libraries(${this} PUBLIC phmap PRIVATE httplib streamvbyte TBB::tbb)
 set_target_properties(${this} PROPERTIES LINKER_LANGUAGE CXX)
+
+add_executable(apex exec/main.cpp)
+target_link_libraries(apex apex_lib)

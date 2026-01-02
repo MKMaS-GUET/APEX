@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "apex/query/query_graph.hpp"
+#include "query/query_graph.hpp"
 
 QueryGraph::Edge::Edge(uint id, Position pos, uint dst) : id(id), pos(pos), dst(dst) {}
 

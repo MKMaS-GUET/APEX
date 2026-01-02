@@ -1,7 +1,7 @@
 #include <iostream>
 
-#include "apex/index/characteristic_set.hpp"
-#include "apex/utils/vbyte.hpp"
+#include "index/characteristic_set.hpp"
+#include "utils/vbyte.hpp"
 
 CharacteristicSet::Trie::Trie() {
     cnt = 0;

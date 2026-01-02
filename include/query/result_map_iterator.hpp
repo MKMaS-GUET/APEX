@@ -1,7 +1,7 @@
 #ifndef RESULT_MAP_ITERATOR_HPP
 #define RESULT_MAP_ITERATOR_HPP
 
-#include "apex/index/index_retriever.hpp"
+#include "index/index_retriever.hpp"
 #include "pre_processor.hpp"
 #include "result_map.hpp"
 

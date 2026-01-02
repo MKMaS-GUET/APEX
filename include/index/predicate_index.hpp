@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "apex/utils/mmap.hpp"
 #include "sys/types.h"
+#include "utils/mmap.hpp"
 
 class PredicateIndex {
    public:

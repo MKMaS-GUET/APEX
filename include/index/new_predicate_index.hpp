@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "apex/utils/bitset.hpp"
+#include "utils/bitset.hpp"
 
 class NewPredicateIndex {
    public:

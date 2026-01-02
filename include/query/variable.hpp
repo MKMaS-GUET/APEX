@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "apex/index/index_retriever.hpp"
+#include "index/index_retriever.hpp"
 
 using Term = SPARQLParser::Term;
 

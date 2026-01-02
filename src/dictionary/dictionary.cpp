@@ -1,5 +1,5 @@
-#include "apex/dictionary/dictionary.hpp"
-#include "apex/utils/vbyte.hpp"
+#include "dictionary/dictionary.hpp"
+#include "utils/vbyte.hpp"
 
 bool Dictionary::LoadPredicate(std::vector<std::string>& id2predicate, hash_map<std::string, uint>& predicate2id) {
     std::ifstream predicate_in(dict_path_ + "/predicates", std::ofstream::out | std::ofstream::binary);

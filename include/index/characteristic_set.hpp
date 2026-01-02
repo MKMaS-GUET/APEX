@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 
-#include "apex/utils/mmap.hpp"
+#include "utils/mmap.hpp"
 
 class CharacteristicSet {
    public:

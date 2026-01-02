@@ -1,4 +1,4 @@
-#include "apex/utils/bit_operations.hpp"
+#include "utils/bit_operations.hpp"
 
 #include <iostream>
 

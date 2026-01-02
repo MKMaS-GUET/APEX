@@ -3,9 +3,9 @@
 
 #include <vector>
 
-#include "apex/parser/sparql_parser.hpp"
-#include "apex/utils/udp_service.hpp"
+#include "parser/sparql_parser.hpp"
 #include "sub_query_executor.hpp"
+#include "utils/udp_service.hpp"
 
 class QueryExecutor {
     uint max_threads_;

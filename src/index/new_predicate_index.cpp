@@ -2,8 +2,8 @@
 #include <iostream>
 #include <thread>
 
-#include "apex/index/daas.hpp"
-#include "apex/index/new_predicate_index.hpp"
+#include "index/daas.hpp"
+#include "index/new_predicate_index.hpp"
 
 void NewPredicateIndex::Index::Build(std::vector<std::pair<uint, uint>>& so_pairs) {
     std::vector<uint> s_set;

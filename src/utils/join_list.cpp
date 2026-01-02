@@ -1,6 +1,4 @@
-#include "apex/utils/join_list.hpp"
-
-#include <iostream>
+#include "utils/join_list.hpp"
 
 JoinList::JoinList() {
     has_empty_ = false;

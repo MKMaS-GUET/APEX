@@ -1,4 +1,4 @@
-#include "apex/query/result_map_iterator.hpp"
+#include "query/result_map_iterator.hpp"
 
 ResultMapIterator::ResultMapIterator(std::vector<ResultMap*> result_map,
                                      std::vector<std::vector<std::pair<uint, uint>>>& result_relation,

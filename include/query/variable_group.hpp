@@ -4,6 +4,7 @@
 #include <span>
 
 #include "result_map.hpp"
+#include "utils/chunked_vector.hpp"
 
 using CandidateMap = phmap::flat_hash_map<uint, std::span<uint>>;
 
@@ -25,7 +26,7 @@ class VariableGroup {
 
     std::vector<uint> current_result_;
 
-    std::vector<std::vector<uint>> results_;
+    ChunkedVector results_;
 
     std::vector<uint> empty;
 
@@ -38,6 +39,13 @@ class VariableGroup {
     bool UpdateCurrentResult();
 
     void GenCandidateValue();
+
+    std::span<const uint> RowAt(size_t index) const;
+
+    void TraverseRange(uint start,
+                       uint end,
+                       const std::vector<std::vector<uint>>& result_map_keys_template,
+                       std::vector<uint>& out);
 
    public:
     std::vector<uint> var_offsets;
@@ -62,9 +70,7 @@ class VariableGroup {
 
         inline iterator(const VariableGroup* var_group, size_t index) : var_group_(var_group), index_(index) {}
 
-        inline const std::vector<uint>& operator*() const { return var_group_->results_[index_]; }
-
-        inline const std::vector<uint>* operator->() const { return &(operator*()); }
+        inline std::span<const uint> operator*() const { return var_group_->RowAt(index_); }
 
         inline iterator& operator++() {
             ++index_;
@@ -95,7 +101,8 @@ class VariableGroup {
     VariableGroup(std::vector<ResultMap>& result_map,
                   std::pair<uint, uint> range,
                   std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
-                  Group group);
+                  Group group,
+                  uint max_threads);
 
     VariableGroup(Group group);
 
@@ -107,7 +114,7 @@ class VariableGroup {
 
     iterator begin() const { return iterator(this, 0); }
 
-    iterator end() const { return iterator(this, results_.size()); }
+    iterator end() const { return iterator(this, size()); }
 
     size_t size() const { return results_.size(); }
 };

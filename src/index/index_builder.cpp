@@ -1,12 +1,12 @@
-#include "apex/index/index_builder.hpp"
-#include "apex/dictionary/dictionary_builder.hpp"
-#include "apex/index/characteristic_set.hpp"
-#include "apex/index/cs_daa_map.hpp"
-#include "apex/index/daas.hpp"
-#include "apex/utils/bitset.hpp"
-#include "apex/utils/mmap.hpp"
-#include "apex/utils/vbyte.hpp"
+#include "index/index_builder.hpp"
+#include "dictionary/dictionary_builder.hpp"
+#include "index/characteristic_set.hpp"
+#include "index/cs_daa_map.hpp"
+#include "index/daas.hpp"
 #include "streamvbyte.h"
+#include "utils/bitset.hpp"
+#include "utils/mmap.hpp"
+#include "utils/vbyte.hpp"
 
 IndexBuilder::IndexBuilder(std::string db_name, std::string data_file) {
     db_name_ = db_name;

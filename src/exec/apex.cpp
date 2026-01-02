@@ -1,14 +1,19 @@
-#include <apex/apex.hpp>
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
 
-#include "apex/index/index_builder.hpp"
-#include "apex/index/index_retriever.hpp"
-#include "apex/query/query_executor.hpp"
-#include "apex/query/sub_query_executor.hpp"
-#include "apex/utils/udp_service.hpp"
+#include "index/index_builder.hpp"
+#include "index/index_retriever.hpp"
+#include "query/query_executor.hpp"
+#include "query/sub_query_executor.hpp"
+#include "utils/udp_service.hpp"
 
 namespace apex {
 
-void APEX::Create(const std::string& db_name, const std::string& data_file) {
+void Create(const std::string& db_name, const std::string& data_file) {
     auto beg = std::chrono::high_resolution_clock::now();
 
     IndexBuilder builder(db_name, data_file);
@@ -22,7 +27,7 @@ void APEX::Create(const std::string& db_name, const std::string& data_file) {
     std::cout << "create " << db_name << " takes " << diff.count() << " ms." << std::endl;
 }
 
-void APEX::Query(const std::string& db_path, const std::string& query_path) {
+void Query(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         // double traverse_time = 0;
@@ -57,7 +62,7 @@ void APEX::Query(const std::string& db_path, const std::string& query_path) {
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
+            // double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
             std::cout << "query takes " << query_time << " ms." << std::endl;
             // traverse_time += executor.build_group_cost();
             // gen_result_time += executor.gen_result_cost();
@@ -71,7 +76,7 @@ void APEX::Query(const std::string& db_path, const std::string& query_path) {
     }
 }
 
-void APEX::Train(const std::string& db_path, const std::string& query_path) {
+void Train(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         bool print = false;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
@@ -105,7 +110,7 @@ void APEX::Train(const std::string& db_path, const std::string& query_path) {
     }
 }
 
-void APEX::Test(const std::string& db_path, const std::string& query_path) {
+void Test(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         bool print = false;

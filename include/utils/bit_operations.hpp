@@ -1,7 +1,7 @@
 #ifndef BIT_OPERATION_HPP
 #define BIT_OPERATION_HPP
 
-#include "apex/utils/mmap.hpp"
+#include "utils/mmap.hpp"
 
 namespace bitop {
 #define bit_set(bits, offset) ((bits)[(offset) / 8] |= (1 << (7 - (offset) % 8)))

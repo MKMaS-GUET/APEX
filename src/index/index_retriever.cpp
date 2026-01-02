@@ -1,8 +1,8 @@
-#include "apex/index/index_retriever.hpp"
-#include "apex/index/predicate_index.hpp"
-#include "apex/utils/join_list.hpp"
-#include "apex/utils/vbyte.hpp"
+#include "index/index_retriever.hpp"
+#include "index/predicate_index.hpp"
 #include "streamvbyte.h"
+#include "utils/join_list.hpp"
+#include "utils/vbyte.hpp"
 
 IndexRetriever::IndexRetriever() {}
 

@@ -2,7 +2,7 @@
 #include <iomanip>
 #include <iostream>
 
-#include "apex/parser/sparql_parser.hpp"
+#include "parser/sparql_parser.hpp"
 
 SPARQLParser::ParserException::ParserException(std::string message) : message(std::move(message)) {}
 

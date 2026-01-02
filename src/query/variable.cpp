@@ -1,4 +1,4 @@
-#include "apex/query/variable.hpp"
+#include "query/variable.hpp"
 
 Variable::Variable()
     : position(SPARQLParser::Term::kShared),

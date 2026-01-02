@@ -1,4 +1,4 @@
-#include "apex/query/pre_processor.hpp"
+#include "query/pre_processor.hpp"
 
 using TripplePattern = std::vector<std::array<SPARQLParser::Term, 3>>;
 
