@@ -62,7 +62,7 @@ void Query(const std::string& db_path, const std::string& query_path) {
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
-            // double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
+            double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
             std::cout << "query takes " << query_time << " ms." << std::endl;
             // traverse_time += executor.build_group_cost();
             // gen_result_time += executor.gen_result_cost();
