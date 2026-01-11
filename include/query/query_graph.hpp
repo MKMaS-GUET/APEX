@@ -48,6 +48,8 @@ class QueryGraph {
     void UpdateQueryGraph(std::string variable, uint result_map_len);
 
     std::string ToString();
+
+    uint est_size(std::string var);
 };
 
 #endif

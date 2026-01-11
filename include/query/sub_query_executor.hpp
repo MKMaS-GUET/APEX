@@ -52,13 +52,13 @@ class SubQueryExecutor {
                     VariableGroup::iterator begin_it,
                     VariableGroup::iterator end_it,
                     uint target_group_idx,
-                    uint var_cnt);
+                    uint var_cnt,
+                    uint key_cnt);
 
-    uint ParallelJoin(std::vector<Variable*> vars, std::vector<VariableGroup*> variable_groups, ResultMap& result);
-
-    uint ParallelJoinWorkStealing(std::vector<Variable*> vars,
-                                  std::vector<VariableGroup*> variable_groups,
-                                  ResultMap& result);
+    uint ParallelJoin(std::vector<Variable*> vars,
+                      std::vector<VariableGroup*> variable_groups,
+                      ResultMap& result,
+                      bool use_work_stealing);
 
     std::vector<VariableGroup::Group> GetVariableGroup();
 

@@ -55,7 +55,7 @@ class VariableGroup {
     std::vector<uint> var_result_offset;
 
     struct Group {
-        std::vector<std::vector<uint>> ancestors;
+        std::vector<std::vector<uint>> dependencies;
         std::vector<uint> var_offsets;
         std::vector<uint> key_offsets;
     };

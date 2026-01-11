@@ -11,8 +11,8 @@ std::vector<uint>* LeapfrogJoin(JoinList& lists) {
 
     if (lists.Size() == 1) {
         auto list = lists.GetListByIndex(0);
-        for (uint i = 0; i < list.size(); i++)
-            result_set->push_back(list[i]);
+        result_set->resize(list.size());
+        std::copy(list.begin(), list.end(), result_set->begin());
 
         return result_set;
     }

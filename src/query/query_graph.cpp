@@ -196,6 +196,10 @@ void QueryGraph::UpdateQueryGraph(std::string variable, uint cur_est_size) {
     }
 }
 
+uint QueryGraph::est_size(std::string var) {
+    return est_size_[vertexes_[var]];
+}
+
 std::string QueryGraph::ToString() {
     std::ostringstream json;
     json << "{\n";

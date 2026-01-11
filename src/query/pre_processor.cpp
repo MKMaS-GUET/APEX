@@ -200,6 +200,10 @@ std::string PreProcessor::query_graph() {
     return query_graph_.ToString();
 }
 
+uint PreProcessor::est_size(std::string var) {
+    return query_graph_.est_size(var);
+}
+
 bool PreProcessor::use_order_generator() {
     return use_order_generator_;
 }

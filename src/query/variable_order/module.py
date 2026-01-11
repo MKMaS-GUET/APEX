@@ -95,9 +95,7 @@ class GraphActorCritic(nn.Module):
             )
         )
         degree = normalize(
-            torch.tensor(
-                    query_graph["degree"], dtype=torch.float32, device=self.device
-            )
+            torch.tensor(query_graph["degree"], dtype=torch.float32, device=self.device)
         )
 
         # degree_less_3 = True

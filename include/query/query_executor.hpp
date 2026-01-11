@@ -5,7 +5,7 @@
 
 #include "parser/sparql_parser.hpp"
 #include "sub_query_executor.hpp"
-#include "utils/udp_service.hpp"
+#include "utils/uds_service.hpp"
 
 class QueryExecutor {
     uint max_threads_;
@@ -33,9 +33,9 @@ class QueryExecutor {
 
     void Query();
 
-    void Train(UDPService& service);
+    void Train(UDSService& service);
 
-    void Test(UDPService& service);
+    void Test(UDSService& service);
 
     uint PrintResult(bool print);
 

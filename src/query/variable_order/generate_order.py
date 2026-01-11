@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
-import udp_service
+import uds_service
 import json
 import logging
 
@@ -226,6 +226,17 @@ def select_vertex_gnn(query_graph, model):
 
             # 提取候选节点的 logits
             candidate_logits = action_logits[candidate_indices]
+            
+            candidate_probs = F.softmax(candidate_logits, dim=0)
+            print(candidate_probs)
+            if len(candidate_probs) >= 2:
+                top2, _ = torch.topk(candidate_probs, k=2)
+                diff = (top2[0] - top2[1]).item()
+                
+                # 如果概率差距过大,返回 None
+                if diff < 0.1:  # 可以调整这个阈值
+                    logger.info(f"Gap too small: {diff:.4f}, returning None")
+                    return "none"
 
             # 找到 logits 最大的候选节点
             best_candidate_idx = int(torch.argmax(candidate_logits).item())
@@ -267,7 +278,10 @@ logger = logging.getLogger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
-service = udp_service.UDPService(2078, 2077)
+UDS_CPP_PATH = "/tmp/apex_cpp.sock"
+UDS_PY_PATH = "/tmp/apex_py.sock"
+
+service = uds_service.UDSService(UDS_PY_PATH, UDS_CPP_PATH)
 max_id = int(service.receive_message())
 
 model = GraphActorCritic(device, max_id=max_id).to(device)

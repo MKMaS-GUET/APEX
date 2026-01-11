@@ -213,7 +213,7 @@ void QueryExecutor::Query() {
     // var_order.close();
 }
 
-void QueryExecutor::Train(UDPService& service) {
+void QueryExecutor::Train(UDSService& service) {
     uint limit = parser_.Limit();
 
     for (auto& sub_query : sub_queries_) {
@@ -276,7 +276,7 @@ void QueryExecutor::Train(UDPService& service) {
     }
 }
 
-void QueryExecutor::Test(UDPService& service) {
+void QueryExecutor::Test(UDSService& service) {
     uint total_limit = parser_.Limit();
     for (auto& sub_query : sub_queries_) {
         auto executor = new SubQueryExecutor(index_, sub_query, is_cycle_, total_limit, true, max_threads_);
@@ -299,6 +299,8 @@ void QueryExecutor::Test(UDPService& service) {
                 gen_plan_cost_ += time.count();
 
                 start = std::chrono::high_resolution_clock::now();
+                if (next_variable == "none")
+                    next_variable = executor->NextVarieble();
                 executor->ProcessNextVariable(next_variable);
                 time = std::chrono::high_resolution_clock::now() - start;
                 std::cout << "Processing " << next_variable << " takes: " << time.count() << " ms" << std::endl;

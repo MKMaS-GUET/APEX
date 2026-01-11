@@ -71,8 +71,17 @@ std::string SubQueryExecutor::NextVarieble() {
     if (candidate_variable.empty())
         candidate_variable = std::vector<std::string>(remaining_variables_.begin(), remaining_variables_.end());
 
-    std::sort(candidate_variable.begin(), candidate_variable.end(),
-              [&](std::string a, std::string b) { return degrees[a] < degrees[b]; });
+    // dynamic greedy order
+    std::sort(candidate_variable.begin(), candidate_variable.end(), [&](std::string a, std::string b) {
+        if (degrees[a] != degrees[b])
+            return degrees[a] < degrees[b];
+        return pre_processor_.est_size(a) > pre_processor_.est_size(b);
+    });
+
+    // // static greedy order
+    // std::sort(candidate_variable.begin(), candidate_variable.end(), [&](std::string a, std::string b) {
+    //     return degrees[a] < degrees[b];
+    // });
 
     uint max_degree = degrees[candidate_variable.back()];
     std::vector<std::string> top_candidates;
@@ -83,7 +92,7 @@ std::string SubQueryExecutor::NextVarieble() {
 
     std::string next_variable = top_candidates.back();
 
-    // std::vector<std::string> temp = {"?v1", "?v0", "?v2"};
+    // std::vector<std::string> temp = {"?v2", "?v0", "?v1", "?v3"};
     // next_variable = temp[variable_id_];
 
     // std::cout << next_variable << std::endl;
@@ -96,7 +105,8 @@ uint SubQueryExecutor::JoinWorker(const std::vector<Variable*>& vars,
                                   VariableGroup::iterator begin_it,
                                   VariableGroup::iterator end_it,
                                   uint target_group_idx,
-                                  uint var_cnt) {
+                                  uint var_cnt,
+                                  uint key_cnt) {
     const uint group_cnt = variable_groups.size();
     if (group_cnt == 0)
         return 0;
@@ -115,51 +125,79 @@ uint SubQueryExecutor::JoinWorker(const std::vector<Variable*>& vars,
         }
     }
 
-    std::vector<uint> key(var_cnt, 0);
+    auto insert_result = [&](std::vector<uint>* intersection, const std::vector<uint>& key) {
+        if (intersection != nullptr) {
+            if (!intersection->empty()) {
+                auto emplace_result = result.emplace(key, intersection);
+                if (emplace_result.second)
+                    local_result_len += intersection->size();
+                else
+                    delete intersection;
+            } else {
+                delete intersection;
+            }
+        }
+    };
+
+    std::vector<uint> key(key_cnt, 0);
     if (group_cnt == 1) {
         const auto& group = variable_groups[0];
         const auto& var_offsets = group->var_offsets;
-        const auto& key_offsets = group->key_offsets;
         const auto& var_result_offset = group->var_result_offset;
-        const uint key_offsets_size = key_offsets.size();
-
         auto it = (target_group_idx == 0) ? begin_it : group->begin();
         auto end = (target_group_idx == 0) ? end_it : group->end();
 
-        for (; it != end; ++it) {
-            std::fill(key.begin(), key.end(), 0);
-            std::vector<uint>* intersection = nullptr;
-            const auto& candidate_keys = *it;
+        if (var_cnt == 1) {
+            for (; it != end; ++it) {
+                uint k = (*it)[var_result_offset[0]];
+                key[0] = k;
 
-            JoinList join_list;
-            for (uint v = 0; v < key_offsets_size; ++v) {
-                uint k = candidate_keys[var_result_offset[v]];
-                uint key_offset = key_offsets[v];
-                if (key_offset > 0)
-                    key[key_offset - 1] = k;
+                JoinList join_list;
+                if (vars[var_offsets[0]]->is_none)
+                    join_list.AddList(vars[var_offsets[0]]->Retrieve(k));
+                else
+                    join_list.AddList(vars[var_offsets[0]]->PreRetrieve());
 
-                if (vars[var_offsets[v]]->is_none)
-                    join_list.AddList(vars[var_offsets[v]]->Retrieve(k));
-                else {
-                    join_list.AddList(vars[var_offsets[v]]->PreRetrieve());
-                }
+                std::vector<uint>* intersection = nullptr;
+                intersection = LeapfrogJoin(join_list);
+
+                // std::span<uint> temp;
+                // if (vars[var_offsets[0]]->is_none) {
+                //     if (auto v = vars[var_offsets[0]]->Retrieve(k))
+                //         temp = std::span(*v);
+                // } else {
+                //     temp = vars[var_offsets[0]]->PreRetrieve();
+                // }
+                // std::vector<uint>* intersection = new std::vector<uint>();
+                // intersection->resize(temp.size());
+                // std::copy(temp.begin(), temp.end(), intersection->begin());
+                insert_result(intersection, key);
             }
-            intersection = LeapfrogJoin(join_list);
+            return local_result_len;
+        } else {
+            const auto& key_offsets = group->key_offsets;
+            const uint key_offsets_size = key_offsets.size();
+            for (; it != end; ++it) {
+                std::fill(key.begin(), key.end(), 0);
+                std::vector<uint>* intersection = nullptr;
+                const auto& candidate_keys = *it;
+                JoinList join_list;
+                for (uint v = 0; v < key_offsets_size; ++v) {
+                    uint k = candidate_keys[var_result_offset[v]];
+                    uint key_offset = key_offsets[v];
+                    if (key_offset > 0)
+                        key[key_offset - 1] = k;
 
-            if (intersection != nullptr) {
-                if (!intersection->empty()) {
-                    auto emplace_result = result.emplace(key, intersection);
-
-                    if (emplace_result.second)
-                        local_result_len += intersection->size();
+                    if (vars[var_offsets[v]]->is_none)
+                        join_list.AddList(vars[var_offsets[v]]->Retrieve(k));
                     else
-                        delete intersection;
-                } else {
-                    delete intersection;
+                        join_list.AddList(vars[var_offsets[v]]->PreRetrieve());
                 }
+                intersection = LeapfrogJoin(join_list);
+                insert_result(intersection, key);
             }
+            return local_result_len;
         }
-        return local_result_len;
     }
 
     while (true) {
@@ -195,19 +233,7 @@ uint SubQueryExecutor::JoinWorker(const std::vector<Variable*>& vars,
             break;
 
         std::vector<uint>* intersection = LeapfrogJoin(join_list);
-
-        if (intersection != nullptr) {
-            if (!intersection->empty()) {
-                auto emplace_result = result.emplace(key, intersection);
-
-                if (emplace_result.second)
-                    local_result_len += intersection->size();
-                else
-                    delete intersection;
-            } else {
-                delete intersection;
-            }
-        }
+        insert_result(intersection, key);
 
         int group_idx = static_cast<int>(group_cnt) - 1;
         while (group_idx >= 0) {
@@ -225,21 +251,23 @@ uint SubQueryExecutor::JoinWorker(const std::vector<Variable*>& vars,
     return local_result_len;
 }
 
-uint SubQueryExecutor::ParallelJoinWorkStealing(std::vector<Variable*> vars,
-                                                std::vector<VariableGroup*> variable_groups,
-                                                ResultMap& result) {
+uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
+                                    std::vector<VariableGroup*> variable_groups,
+                                    ResultMap& result,
+                                    bool use_work_stealing) {
     const uint group_cnt = variable_groups.size();
     if (group_cnt == 0)
         return 0;
 
     uint var_cnt = 0;
+    uint key_cnt = 0;
     for (auto& group : variable_groups) {
         for (uint offset : group->key_offsets) {
             if (offset > 0)
-                var_cnt++;
+                key_cnt++;
+            var_cnt++;
         }
     }
-    // std::cout << group_cnt << " " << var_cnt << std::endl;
 
     uint max_size = 0;
     uint max_group_idx = 0;
@@ -258,92 +286,56 @@ uint SubQueryExecutor::ParallelJoinWorkStealing(std::vector<Variable*> vars,
     uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(max_threads_));
     if (num_threads <= 1)
         return JoinWorker(vars, variable_groups, result, variable_groups[max_group_idx]->begin(),
-                          variable_groups[max_group_idx]->end(), group_cnt, var_cnt);
+                          variable_groups[max_group_idx]->end(), max_group_idx, var_cnt, key_cnt);
 
-    // 创建远多于线程数的小块，利用共享任务队列实现 work stealing
-    const uint chunk_factor = 32;
-    uint target_chunks = std::max<uint>(num_threads * chunk_factor, num_threads);
-    uint chunk_size = (max_size + target_chunks - 1) / target_chunks;
-    if (chunk_size == 0)
-        chunk_size = 1;
+    if (use_work_stealing) {
+        const uint chunk_factor = 32;
+        uint target_chunks = std::max<uint>(num_threads * chunk_factor, num_threads);
+        uint chunk_size = (max_size + target_chunks - 1) / target_chunks;
+        if (chunk_size == 0)
+            chunk_size = 1;
 
-    uint chunk_cnt = (max_size + chunk_size - 1) / chunk_size;
-    std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
-    ranges.reserve(chunk_cnt);
+        uint chunk_cnt = (max_size + chunk_size - 1) / chunk_size;
+        std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
+        ranges.reserve(chunk_cnt);
 
-    auto base_begin = variable_groups[max_group_idx]->begin();
-    for (uint chunk = 0; chunk < chunk_cnt; ++chunk) {
-        uint begin_idx = chunk * chunk_size;
-        uint end_idx = std::min<uint>(max_size, begin_idx + chunk_size);
-        auto chunk_begin = base_begin + static_cast<std::ptrdiff_t>(begin_idx);
-        auto chunk_end = base_begin + static_cast<std::ptrdiff_t>(end_idx);
-        ranges.emplace_back(chunk_begin, chunk_end);
-    }
-
-    std::atomic<size_t> next_range{0};
-    std::atomic<uint> result_len = 0;
-    std::vector<std::thread> threads;
-    threads.reserve(num_threads);
-
-    for (uint t = 0; t < num_threads; ++t) {
-        threads.emplace_back([&, t]() {
-            uint local_result_len = 0;
-            while (true) {
-                size_t idx = next_range.fetch_add(1, std::memory_order_relaxed);
-                if (idx >= ranges.size())
-                    break;
-                local_result_len += JoinWorker(vars, variable_groups, result, ranges[idx].first, ranges[idx].second,
-                                               max_group_idx, var_cnt);
-            }
-            result_len.fetch_add(local_result_len, std::memory_order_relaxed);
-        });
-    }
-
-    for (auto& thread : threads) {
-        if (thread.joinable())
-            thread.join();
-    }
-    return result_len.load(std::memory_order_relaxed);
-}
-
-uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
-                                    std::vector<VariableGroup*> variable_groups,
-                                    ResultMap& result) {
-    uint group_cnt = variable_groups.size();
-
-    uint var_cnt = 0;
-    for (auto& group : variable_groups) {
-        for (uint offset : group->key_offsets) {
-            if (offset > 0)
-                var_cnt++;
+        auto base_begin = variable_groups[max_group_idx]->begin();
+        for (uint chunk = 0; chunk < chunk_cnt; ++chunk) {
+            uint begin_idx = chunk * chunk_size;
+            uint end_idx = std::min<uint>(max_size, begin_idx + chunk_size);
+            auto chunk_begin = base_begin + static_cast<std::ptrdiff_t>(begin_idx);
+            auto chunk_end = base_begin + static_cast<std::ptrdiff_t>(end_idx);
+            ranges.emplace_back(chunk_begin, chunk_end);
         }
-    }
 
-    // 找出最大的迭代器
-    uint max_size = 0;
-    uint max_group_idx = 0;
-    uint max_join_cnt = 1;
-    for (uint i = 0; i < group_cnt; i++) {
-        uint size = variable_groups[i]->size();
-        max_join_cnt *= size;
-        if (size > max_size) {
-            max_size = size;
-            max_group_idx = i;
+        std::atomic<size_t> next_range{0};
+        std::atomic<uint> result_len = 0;
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+
+        for (uint t = 0; t < num_threads; ++t) {
+            threads.emplace_back([&]() {
+                uint local_result_len = 0;
+                while (true) {
+                    size_t idx = next_range.fetch_add(1, std::memory_order_relaxed);
+                    if (idx >= ranges.size())
+                        break;
+                    local_result_len += JoinWorker(vars, variable_groups, result, ranges[idx].first, ranges[idx].second,
+                                                   max_group_idx, var_cnt, key_cnt);
+                }
+                result_len.fetch_add(local_result_len, std::memory_order_relaxed);
+            });
         }
+
+        for (auto& thread : threads) {
+            if (thread.joinable())
+                thread.join();
+        }
+        return result_len.load(std::memory_order_relaxed);
     }
 
     std::atomic<uint> result_len = 0;
 
-    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(max_threads_));
-    num_threads = max_threads_;
-    // std::cout << max_join_cnt << " " << num_threads << std::endl;
-    if (num_threads <= 1) {
-        uint result_len = JoinWorker(vars, variable_groups, result, variable_groups[max_group_idx]->begin(),
-                                     variable_groups[max_group_idx]->end(), group_cnt, var_cnt);
-        return result_len;
-    }
-
-    // 计算每个线程的范围
     std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
     auto begin_it = variable_groups[max_group_idx]->begin();
     auto end_it = variable_groups[max_group_idx]->end();
@@ -355,7 +347,6 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
         begin_it = chunk_end;
     }
 
-    // 线程同步
     std::mutex result_mutex;
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
@@ -363,7 +354,7 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
     for (const auto& range : ranges) {
         threads.emplace_back([&, range]() {
             uint thread_result_len =
-                JoinWorker(vars, variable_groups, result, range.first, range.second, max_group_idx, var_cnt);
+                JoinWorker(vars, variable_groups, result, range.first, range.second, max_group_idx, var_cnt, key_cnt);
             {
                 std::lock_guard<std::mutex> lock(result_mutex);
                 result_len += thread_result_len;
@@ -395,24 +386,24 @@ uint SubQueryExecutor::FirstVariableJoin(std::vector<Variable*> vars, ResultMap&
 }
 
 std::vector<VariableGroup::Group> SubQueryExecutor::GetVariableGroup() {
-    std::vector<std::vector<uint>> var_ancestors;
+    std::vector<std::vector<uint>> var_dependencies;
     if (plan_.empty())
         return {};
 
     uint cur_id = variable_id_;
     auto cur_vars = plan_[variable_id_].second;
 
-    var_ancestors.reserve(cur_vars.size());
+    var_dependencies.reserve(cur_vars.size());
 
     for (const auto& var : cur_vars) {
-        std::vector<uint> ancestors;
+        std::vector<uint> dependencies;
         std::vector<char> visited(plan_.size(), 0);
 
         std::function<void(uint)> dfs = [&](uint cur_id) {
             if (visited[cur_id])
                 return;
             visited[cur_id] = 1;
-            ancestors.push_back(cur_id);
+            dependencies.push_back(cur_id);
 
             for (const auto& upper_var : plan_[cur_id].second) {
                 if (upper_var->connection) {
@@ -432,10 +423,10 @@ std::vector<VariableGroup::Group> SubQueryExecutor::GetVariableGroup() {
             if (parent_id < cur_id)
                 dfs(parent_id);
         }
-        var_ancestors.push_back(std::move(ancestors));
+        var_dependencies.push_back(std::move(dependencies));
     }
 
-    const uint n = var_ancestors.size();
+    const uint n = var_dependencies.size();
     if (n == 0)
         return {};
 
@@ -445,7 +436,7 @@ std::vector<VariableGroup::Group> SubQueryExecutor::GetVariableGroup() {
     layer_owner.reserve(n * 2);
 
     for (uint i = 0; i < n; ++i) {
-        for (uint layer : var_ancestors[i]) {
+        for (uint layer : var_dependencies[i]) {
             auto it = layer_owner.find(layer);
             if (it == layer_owner.end())
                 layer_owner.emplace(layer, i);
@@ -468,23 +459,25 @@ std::vector<VariableGroup::Group> SubQueryExecutor::GetVariableGroup() {
         std::sort(var_offsets.begin(), var_offsets.end());
         group.var_offsets = var_offsets;
         for (uint offset : var_offsets)
-            group.ancestors.push_back(var_ancestors[offset]);
+            group.dependencies.push_back(var_dependencies[offset]);
         result.push_back(group);
     }
 
     // for (uint i = 0; i < result.size(); i++) {
     //     std::cout << "group: " << std::endl;
-    //     std::cout << "ancestors: ";
-    //     for (const auto& ancestor_vec : result[i].ancestors) {
+    //     std::cout << "dependencies: ";
+    //     for (const auto& dep_vec : result[i].dependencies) {
     //         std::cout << "[";
-    //         for (uint x : ancestor_vec)
+    //         for (uint x : dep_vec)
     //             std::cout << x << " ";
     //         std::cout << "]";
     //     }
     //     std::cout << std::endl;
     //     std::cout << "variables: ";
+    //     std::cout << "[";
     //     for (uint x : result[i].var_offsets)
     //         std::cout << x << " ";
+    //     std::cout << "]";
     //     std::cout << std::endl;
     // }
 
@@ -501,8 +494,10 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
             if (!ordering_complete_)
                 result_relation_[var->connection->var_id].emplace_back(variable_id_, none_cnt);
             none_cnt++;
+            key_offsets_map.push_back(none_cnt);
+        } else {
+            key_offsets_map.push_back(0);
         }
-        key_offsets_map.push_back(none_cnt);
     }
     for (auto& group : var_idx_group) {
         std::vector<uint> key_offsets;
@@ -518,7 +513,7 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
             variable_groups.push_back(
                 new VariableGroup(result_map_, first_variable_range_, result_relation_, group, max_threads_));
         } else {
-            std::vector<uint> ancestor = group.ancestors.front();
+            std::vector<uint> ancestor = group.dependencies.front();
             if (ancestor.size()) {
                 if (ancestor.front() != 0) {
                     variable_groups.push_back(new VariableGroup(result_map_[ancestor.front()], group));
@@ -577,8 +572,8 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
     if (variable_id_ == pre_processor_.VariableCount() - 1)
         ordering_complete_ = true;
 
-    if (pre_processor_.use_order_generator())
-        pre_processor_.UpdateQueryGraph(variable, result_len);
+    // if (pre_processor_.use_order_generator())
+    pre_processor_.UpdateQueryGraph(variable, result_len);
 
     variable_id_++;
     remaining_variables_.erase(variable);
@@ -608,7 +603,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
 
     uint result_len = 0;
     if (variable_id_ != 0)
-        result_len = ParallelJoinWorkStealing(next_vars, variable_groups, result_map_[variable_id_]);
+        result_len = ParallelJoin(next_vars, variable_groups, result_map_[variable_id_], true);
     else
         result_len = FirstVariableJoin(next_vars, result_map_[variable_id_]);
     // std::cout << result_len << std::endl;

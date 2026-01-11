@@ -16,12 +16,12 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
 
     std::vector<uint> levels;
     if (use_optimization) {
-        std::vector<uint> intersection = group.ancestors[0];
+        std::vector<uint> intersection = group.dependencies[0];
 
-        for (size_t i = 1; i < group.ancestors.size(); ++i) {
-            if (!group.ancestors[i].empty()) {
+        for (size_t i = 1; i < group.dependencies.size(); ++i) {
+            if (!group.dependencies[i].empty()) {
                 std::vector<uint> temp;
-                std::vector<uint> sorted_ancestor = group.ancestors[i];
+                std::vector<uint> sorted_ancestor = group.dependencies[i];
                 std::sort(intersection.begin(), intersection.end());
                 std::sort(sorted_ancestor.begin(), sorted_ancestor.end());
 
@@ -36,7 +36,7 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
 
         phmap::flat_hash_set<uint> ancestor_union;
         ancestor_union.insert(max_level);
-        for (const auto& an : group.ancestors) {
+        for (const auto& an : group.dependencies) {
             for (auto a : an) {
                 if (a != max_level)
                     ancestor_union.insert(a);
@@ -121,7 +121,7 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
         result_relation_.push_back(new_pos);
     }
 
-    for (auto& ancestor : group.ancestors)
+    for (auto& ancestor : group.dependencies)
         var_result_offset.push_back(var_id_to_level[ancestor[0]]);
 
     size_t row_width = levels.size();

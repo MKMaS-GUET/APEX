@@ -41,6 +41,8 @@ class PreProcessor {
 
     std::string query_graph();
 
+    uint est_size(std::string var);
+
     bool use_order_generator();
 
     double process_cost();

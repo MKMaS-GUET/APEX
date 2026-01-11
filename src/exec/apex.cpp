@@ -9,9 +9,14 @@
 #include "index/index_retriever.hpp"
 #include "query/query_executor.hpp"
 #include "query/sub_query_executor.hpp"
-#include "utils/udp_service.hpp"
+#include "utils/uds_service.hpp"
 
 namespace apex {
+
+namespace {
+constexpr char kCppSocketPath[] = "/tmp/apex_cpp.sock";
+constexpr char kPySocketPath[] = "/tmp/apex_py.sock";
+}  // namespace
 
 void Create(const std::string& db_name, const std::string& data_file) {
     auto beg = std::chrono::high_resolution_clock::now();
@@ -30,8 +35,8 @@ void Create(const std::string& db_name, const std::string& data_file) {
 void Query(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
-        // double traverse_time = 0;
-        // double gen_result_time = 0;
+        double traverse_time = 0;
+        double gen_result_time = 0;
         bool print = false;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
         std::ifstream in(query_path, std::ifstream::in);
@@ -64,8 +69,8 @@ void Query(const std::string& db_path, const std::string& query_path) {
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
             std::cout << "query takes " << query_time << " ms." << std::endl;
-            // traverse_time += executor.build_group_cost();
-            // gen_result_time += executor.gen_result_cost();
+            traverse_time += executor.build_group_cost();
+            gen_result_time += executor.gen_result_cost();
             total_time += query_time;
         }
         // std::cout << "Approx memory used: " << size / sparqls.size() / (1024.0 * 1024.0) << " MB\n";
@@ -89,7 +94,7 @@ void Train(const std::string& db_path, const std::string& query_path) {
                 sparqls.push_back(sparql);
             in.close();
         }
-        UDPService service = UDPService(2077, 2078);
+        UDSService service = UDSService(kCppSocketPath, kPySocketPath);
         service.sendMessage(std::to_string(index->predicate_cnt()));
 
         std::ios::sync_with_stdio(false);
@@ -113,6 +118,7 @@ void Train(const std::string& db_path, const std::string& query_path) {
 void Test(const std::string& db_path, const std::string& query_path) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
+        double gen_plan_time = 0;
         bool print = false;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
         std::ifstream in(query_path, std::ifstream::in);
@@ -125,7 +131,7 @@ void Test(const std::string& db_path, const std::string& query_path) {
             in.close();
         }
 
-        UDPService service = UDPService(2077, 2078);
+        UDSService service = UDSService(kCppSocketPath, kPySocketPath);
 
         std::ios::sync_with_stdio(false);
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
@@ -143,15 +149,18 @@ void Test(const std::string& db_path, const std::string& query_path) {
             uint result_count = executor.PrintResult(false);
 
             std::cout << result_count << " result(s)." << std::endl;
+            std::cout << "gen plan cost: " << executor.gen_plan_cost() << std::endl;
             // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
             // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
             // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
+            gen_plan_time += executor.gen_plan_cost();
 
             std::cout << "query takes " << query_time << " ms." << std::endl;
 
             total_time += query_time;
         }
+        std::cout << "avg gen plan time: " << gen_plan_time / sparqls.size() << " ms." << std::endl;
         std::cout << "avg query time: " << total_time / sparqls.size() << " ms." << std::endl;
         exit(0);
     }
