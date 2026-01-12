@@ -71,6 +71,7 @@ class GraphActorCritic(nn.Module):
         self.actor = nn.Sequential(
             nn.Linear(hidden_dim * 2, hidden_dim),
             nn.ReLU(),
+            nn.Dropout(p=0.1),
             nn.Linear(hidden_dim, 1),
         )
 
@@ -86,17 +87,19 @@ class GraphActorCritic(nn.Module):
     def build_node_features(self, query_graph):
         """构建节点特征（不再包含边特征聚合），并移动到设备"""
 
-        status = torch.tensor(
+        # 直接在目标设备上构造张量，避免 CPU->GPU 的二次拷贝
+        status = torch.as_tensor(
             query_graph["status"], dtype=torch.float32, device=self.device
         )
-        est_size = normalize(
-            torch.tensor(
-                query_graph["est_size"], dtype=torch.float32, device=self.device
-            )
+        est_size_raw = torch.as_tensor(
+            query_graph["est_size"], dtype=torch.float32, device=self.device
         )
-        degree = normalize(
-            torch.tensor(query_graph["degree"], dtype=torch.float32, device=self.device)
+        degree_raw = torch.as_tensor(
+            query_graph["degree"], dtype=torch.float32, device=self.device
         )
+
+        est_size = normalize(est_size_raw)
+        degree = normalize(degree_raw)
 
         # degree_less_3 = True
         # for d in query_graph["degree"]:
@@ -120,14 +123,7 @@ class GraphActorCritic(nn.Module):
         # print("degree: ", degree)
         
         # 拼接所有节点特征（当前仅3维）
-        node_features = torch.stack(
-            [
-                status,
-                est_size,
-                degree,
-            ],
-            dim=1,
-        )  # [num_nodes, 3]
+        node_features = torch.stack([status, est_size, degree], dim=1)  # [num_nodes, 3]
 
         return node_features
 
@@ -137,12 +133,14 @@ class GraphActorCritic(nn.Module):
             edge_index = torch.empty((2, 0), dtype=torch.long, device=self.device)
             return edge_index, None
         edge_index = (
-            torch.tensor(edges, dtype=torch.long, device=self.device).t().contiguous()
+            torch.as_tensor(edges, dtype=torch.long, device=self.device)
+            .t()
+            .contiguous()
         )
         edge_features = query_graph.get("edge_features", None)
         if edge_features is None or len(edge_features) == 0:
             return edge_index, None
-        edge_features_tensor = torch.tensor(
+        edge_features_tensor = torch.as_tensor(
             edge_features, dtype=torch.long, device=self.device
         )
         # edge_features: [num_edges, 2] -> (id, pos)
@@ -152,7 +150,7 @@ class GraphActorCritic(nn.Module):
         edge_weight = self.edge_weight_mlp(edge_feat).squeeze(-1)  # [num_edges]
         return edge_index, edge_weight
 
-    def forward(self, query_graph):
+    def _encode_graph(self, query_graph, need_value: bool = True):
         node_features = self.build_node_features(query_graph)
         num_nodes = node_features.shape[0]
         edge_index, edge_weight = self.build_edge_index_and_weight(query_graph)
@@ -170,10 +168,29 @@ class GraphActorCritic(nn.Module):
             [x, global_features], dim=1
         )  # [num_nodes, hidden_dim * 2]
 
+        if not need_value:
+            return combined_features, None
+
+        pooled_features = torch.mean(combined_features, dim=0)  # [hidden_dim * 2]
+        state_value = self.critic(pooled_features.unsqueeze(0))  # [1, 1]
+        return combined_features, state_value.squeeze()
+
+    def forward(self, query_graph):
+        combined_features, state_value = self._encode_graph(query_graph, need_value=True)
         # Actor输出
         action_logits = self.actor(combined_features).squeeze(-1)  # [num_nodes]
 
-        # Critic输出
-        pooled_features = torch.mean(combined_features, dim=0)  # [hidden_dim * 2]
-        state_value = self.critic(pooled_features.unsqueeze(0))  # [1, 1]
         return action_logits, state_value.squeeze()
+
+    def sample_action_logits(self, query_graph, num_samples: int):
+        """
+        并行生成多次带 dropout 的 actor logits，用于 MC Dropout 估计。
+        """
+        combined_features, _ = self._encode_graph(query_graph, need_value=False)
+        # 扩展批次，把同一个图复制 num_samples 份，然后一次性通过 actor
+        repeated = combined_features.unsqueeze(0).expand(num_samples, -1, -1)
+        flat_features = repeated.reshape(-1, combined_features.size(1))  # [T*N, feat]
+        logits = self.actor(flat_features).squeeze(-1).view(
+            num_samples, combined_features.size(0)
+        )
+        return logits, None

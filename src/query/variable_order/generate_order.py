@@ -87,7 +87,7 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
     norm_len = len_reward_rms.normalize(len_rew)
 
     time_rew = torch.tensor(rewards_raw[1], dtype=torch.float32, device=device)
-    
+
     for i in range(len(time_rew)):
         if len_rew[i] == 0:
             time_rew[i] = -0.5
@@ -203,6 +203,44 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
     return 0
 
 
+@torch.no_grad()
+def select_vertex_gnn_conservative(query_graph, model, fs=1.0, T=20, score_gap_tau=0.1):
+    vertex_status = query_graph["status"]
+    vertices = query_graph["vertices"]
+
+    candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
+    if len(candidate_indices) == 0:
+        candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
+    if not candidate_indices:
+        return None
+    if len(candidate_indices) == 1:
+        return vertices[candidate_indices[0]]
+
+    # 关键：开启 dropout 做 MC Dropout
+    model.train()
+
+    # 并行收集 T 次候选 logits（MC Dropout）
+    sample_logits, _ = model.sample_action_logits(query_graph, T)  # [T, num_nodes]
+    S = sample_logits[:, candidate_indices]  # [T, K]
+
+    # 把 logit 变成 cost：C = -logit
+    C = -S
+    mu = C.mean(dim=0)  # [K]
+    sigma = C.std(dim=0, unbiased=False)  # [K]
+    score = mu + fs * sigma  # [K]  <- Roq-style μ + fσ
+
+    # 可选：如果最优和次优 score 太接近，认为“不确定”，返回 none 走你的 fallback
+    if score_gap_tau > 0 and score.numel() >= 2:
+        best2, _ = torch.topk(-score, k=2)  # -score 越大越好 <=> score 越小越好
+        gap = (best2[0] - best2[1]).item()
+        if gap < score_gap_tau:
+            return "none"
+
+    best_rel = torch.argmin(score).item()
+    best_vertex_idx = candidate_indices[best_rel]
+    return vertices[best_vertex_idx]
+
+
 def select_vertex_gnn(query_graph, model):
     vertex_status = query_graph["status"]
     vertices = query_graph["vertices"]
@@ -226,13 +264,13 @@ def select_vertex_gnn(query_graph, model):
 
             # 提取候选节点的 logits
             candidate_logits = action_logits[candidate_indices]
-            
+
             candidate_probs = F.softmax(candidate_logits, dim=0)
             print(candidate_probs)
             if len(candidate_probs) >= 2:
                 top2, _ = torch.topk(candidate_probs, k=2)
                 diff = (top2[0] - top2[1]).item()
-                
+
                 # 如果概率差距过大,返回 None
                 if diff < 0.1:  # 可以调整这个阈值
                     logger.info(f"Gap too small: {diff:.4f}, returning None")
@@ -265,7 +303,7 @@ def test():
                     break
                 query_graph = json.loads(msg)
                 print(query_graph)
-                next_variable = select_vertex_gnn(query_graph, model)
+                next_variable = select_vertex_gnn_conservative(query_graph, model)
                 service.send_message(next_variable)
                 print(next_variable)
 
