@@ -98,6 +98,7 @@ std::span<uint> Variable::PreRetrieve() {
             }
         }
     }
+
     return pre_retrieve;
 }
 

@@ -38,6 +38,7 @@ constexpr std::string_view kHelpInfo =
     "    Options:\n"
     "      -d, --database <PATH>   Specify the path of the database.\n"
     "      -f, --file <FILE>       Specify the file containing the queries.\n"
+    "      -t, --threads <NUM>     Specify the number of threads (default: 8).\n"
     "\n"
     "  train\n"
     "    Train variable order generator.\n"
@@ -47,6 +48,7 @@ constexpr std::string_view kHelpInfo =
     "    Options:\n"
     "      -d, --database <NAME>   Specify the name of the database.\n"
     "      -f, --file <FILE>       Specify the file containing the queries to train.\n"
+    "      -t, --threads <NUM>     Specify the number of threads (default: 32).\n"
     "\n"
     "  test\n"
     "    Test an RDF database.\n"
@@ -55,7 +57,8 @@ constexpr std::string_view kHelpInfo =
     "\n"
     "    Options:\n"
     "      -d, --database <NAME>   Specify the name of the database.\n"
-    "      -f, --file <FILE>       Specify the file containing the queries to test.\n";
+    "      -f, --file <FILE>       Specify the file containing the queries to test.\n"
+    "      -t, --threads <NUM>     Specify the number of threads (default: 32).\n";
 
 [[noreturn]] void PrintHelpAndExit(int code) {
     std::cout << kHelpInfo << std::endl;
@@ -91,6 +94,7 @@ int main(int argc, char** argv) {
 
     std::string db_path;
     std::string file_path;
+    int max_threads = 0;
     auto consume_value = [&](int& i, const std::string& flag) -> std::string {
         if (i + 1 >= argc || argv[i + 1][0] == '-') {
             std::cerr << "error: argument " << flag << ": expected one argument" << std::endl;
@@ -112,6 +116,10 @@ int main(int argc, char** argv) {
             file_path = consume_value(i, flag);
             continue;
         }
+        if (flag == "-t" || flag == "--threads") {
+            max_threads = std::stoi(consume_value(i, flag));
+            continue;
+        }
 
         std::cerr << "error: unrecognized arguments: " << flag << std::endl;
         return 0;
@@ -119,7 +127,7 @@ int main(int argc, char** argv) {
 
     auto validate_args = [&]() -> bool {
         if (db_path.empty() || file_path.empty()) {
-            std::cerr << "usage: apex " << command << " [-d DATABASE] [-f FILE]" << std::endl;
+            std::cerr << "usage: apex " << command << " [-d DATABASE] [-f FILE] [-t THREADS]" << std::endl;
             if (command == "build")
                 std::cerr << "apex: error: the following arguments are required: [-d DATABASE] [-f DATA FILE]"
                           << std::endl;
@@ -135,14 +143,20 @@ int main(int argc, char** argv) {
         if (validate_args())
             apex::Create(db_path, file_path);
     } else if (command == "query") {
+        if (max_threads == 0)
+            max_threads = 32;
         if (validate_args())
-            apex::Query(NormalizeDbPath(db_path), file_path);
+            apex::Query(NormalizeDbPath(db_path), file_path, (uint)max_threads);
     } else if (command == "train") {
+        if (max_threads == 0)
+            max_threads = 32;
         if (validate_args())
-            apex::Train(NormalizeDbPath(db_path), file_path);
+            apex::Train(NormalizeDbPath(db_path), file_path, (uint)max_threads);
     } else if (command == "test") {
+        if (max_threads == 0)
+            max_threads = 32;
         if (validate_args())
-            apex::Test(NormalizeDbPath(db_path), file_path);
+            apex::Test(NormalizeDbPath(db_path), file_path, (uint)max_threads);
     }
     return 0;
 }

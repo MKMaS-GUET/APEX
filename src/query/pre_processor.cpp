@@ -10,6 +10,7 @@ PreProcessor::PreProcessor(std::shared_ptr<IndexRetriever> index,
     zero_result_ = false;
 
     use_order_generator_ = use_order_generator;
+    use_order_generator_ = true;
 
     TripplePattern one_variable_tp;
     TripplePattern two_variable_tp;

@@ -25,23 +25,41 @@ void ChunkedVector::AppendRowSpan(const uint* data) {
     if (row_width_ == 0 || data == nullptr)
         return;
 
-    if (chunks_.empty() || (chunks_.back().size() / row_width_) >= chunk_rows_) {
-        chunks_.emplace_back();
-        chunks_.back().reserve(chunk_rows_ * row_width_);
-    }
+    AppendRows(data, 1);
+}
 
-    auto& chunk = chunks_.back();
-    chunk.insert(chunk.end(), data, data + row_width_);
-    ++row_count_;
+void ChunkedVector::AppendRows(const uint* data, size_t row_count) {
+    if (row_width_ == 0 || data == nullptr || row_count == 0)
+        return;
+
+    size_t remaining_rows = row_count;
+    const uint* cursor = data;
+
+    while (remaining_rows > 0) {
+        if (chunks_.empty() || (chunks_.back().size() / row_width_) >= chunk_rows_) {
+            chunks_.emplace_back();
+            chunks_.back().reserve(chunk_rows_ * row_width_);
+        }
+
+        auto& chunk = chunks_.back();
+        const size_t filled_rows = chunk.size() / row_width_;
+        const size_t capacity_rows = chunk_rows_ - filled_rows;
+        const size_t rows_to_copy = std::min(remaining_rows, capacity_rows);
+
+        const uint* end_ptr = cursor + rows_to_copy * row_width_;
+        chunk.insert(chunk.end(), cursor, end_ptr);
+
+        cursor = end_ptr;
+        remaining_rows -= rows_to_copy;
+        row_count_ += rows_to_copy;
+    }
 }
 
 void ChunkedVector::AppendFlat(const std::vector<uint>& flat) {
     if (row_width_ == 0 || flat.empty())
         return;
     const size_t rows = flat.size() / row_width_;
-    const uint* data = flat.data();
-    for (size_t i = 0; i < rows; ++i)
-        AppendRowSpan(data + i * row_width_);
+    AppendRows(flat.data(), rows);
 }
 
 std::span<const uint> ChunkedVector::RowAt(size_t index) const {

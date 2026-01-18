@@ -6,7 +6,7 @@ import json
 import logging
 
 from torch.distributions import Categorical
-from module import GraphActorCritic, RunningMeanStd
+from model import GraphActorCritic, RunningMeanStd, set_seed
 
 
 def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, device):
@@ -204,23 +204,33 @@ def train_episode(service, model, optimizer, len_reward_rms, time_reward_rms, de
 
 
 @torch.no_grad()
-def select_vertex_gnn_conservative(query_graph, model, fs=1.0, T=20, score_gap_tau=0.1):
+def select_vertex_gnn(
+    query_graph, model, fs=1.0, T=20, score_gap_tau=0.1, timing_enabled=False
+):
     vertex_status = query_graph["status"]
     vertices = query_graph["vertices"]
+    empty_timing = (
+        {"edge_mlp": 0.0, "gcn_encode": 0.0, "actor_head": 0.0}
+        if timing_enabled
+        else None
+    )
 
     candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
     if len(candidate_indices) == 0:
         candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
     if not candidate_indices:
-        return None
+        return None, empty_timing
     if len(candidate_indices) == 1:
-        return vertices[candidate_indices[0]]
+        return vertices[candidate_indices[0]], empty_timing
 
     # 关键：开启 dropout 做 MC Dropout
     model.train()
 
     # 并行收集 T 次候选 logits（MC Dropout）
-    sample_logits, _ = model.sample_action_logits(query_graph, T)  # [T, num_nodes]
+    sample_logits, timing = model.sample_action_logits(
+        query_graph, T, enable_timing=timing_enabled
+    )  # [T, num_nodes]
+
     S = sample_logits[:, candidate_indices]  # [T, K]
 
     # 把 logit 变成 cost：C = -logit
@@ -234,78 +244,63 @@ def select_vertex_gnn_conservative(query_graph, model, fs=1.0, T=20, score_gap_t
         best2, _ = torch.topk(-score, k=2)  # -score 越大越好 <=> score 越小越好
         gap = (best2[0] - best2[1]).item()
         if gap < score_gap_tau:
-            return "none"
+            return "none", timing
 
     best_rel = torch.argmin(score).item()
     best_vertex_idx = candidate_indices[best_rel]
-    return vertices[best_vertex_idx]
-
-
-def select_vertex_gnn(query_graph, model):
-    vertex_status = query_graph["status"]
-    vertices = query_graph["vertices"]
-    candidate_indices = [i for i, s in enumerate(vertex_status) if s == 1]
-    if len(candidate_indices) == 0:
-        candidate_indices = [i for i, s in enumerate(vertex_status) if s == 0]
-
-    if not candidate_indices:
-        logger.warning("No selectable nodes (status=1) in query graph.")
-        return None
-
-    # 如果只有一个可选节点，直接返回
-    if len(candidate_indices) == 1:
-        return vertices[candidate_indices[0]]
-
-    model.eval()  # 切换到评估模式
-    with torch.no_grad():  # 禁用梯度计算
-        try:
-            # 使用模型计算动作 logits
-            action_logits, _ = model(query_graph)
-
-            # 提取候选节点的 logits
-            candidate_logits = action_logits[candidate_indices]
-
-            candidate_probs = F.softmax(candidate_logits, dim=0)
-            print(candidate_probs)
-            if len(candidate_probs) >= 2:
-                top2, _ = torch.topk(candidate_probs, k=2)
-                diff = (top2[0] - top2[1]).item()
-
-                # 如果概率差距过大,返回 None
-                if diff < 0.1:  # 可以调整这个阈值
-                    logger.info(f"Gap too small: {diff:.4f}, returning None")
-                    return "none"
-
-            # 找到 logits 最大的候选节点
-            best_candidate_idx = int(torch.argmax(candidate_logits).item())
-            best_vertex_idx = candidate_indices[best_candidate_idx]
-
-            # 返回顶点名称
-            selected_vertex = query_graph["vertices"][best_vertex_idx]
-            logger.debug(f"Selected vertex: {selected_vertex}")
-            return selected_vertex
-
-        except Exception as e:
-            logger.error(f"Error during vertex selection: {e}")
-            # 出错时回退到随机选择
-            random_idx = np.random.choice(candidate_indices)
-            return query_graph["vertices"][random_idx]
+    return vertices[best_vertex_idx], timing
 
 
 def test():
+    overall_totals = {"edge_mlp": 0.0, "gcn_encode": 0.0, "actor_head": 0.0}
+    query_counter = 0
+
     while True:
         print("-------------------------------------")
         msg = service.receive_message()
         if msg == "start":
+            query_counter += 1
+            query_totals = {"edge_mlp": 0.0, "gcn_encode": 0.0, "actor_head": 0.0}
             while True:
                 msg = service.receive_message()
                 if msg == "end":
+                    if TIMING_ENABLED:
+                        for key in overall_totals:
+                            overall_totals[key] += query_totals[key]
+                        overall_avg = {
+                            key: overall_totals[key] / query_counter
+                            for key in overall_totals
+                        }
+                        logger.info(
+                            f"Query {query_counter} inf time (ms): "
+                            f"edge_mlp={query_totals['edge_mlp']*1000:.3f}, "
+                            f"gcn_encode={query_totals['gcn_encode']*1000:.3f}, "
+                            f"actor_head={query_totals['actor_head']*1000:.3f}"
+                        )
+                        logger.info(
+                            f"Overall avg inf time (ms) over {query_counter} queries: "
+                            f"edge_mlp={overall_avg['edge_mlp']*1000:.3f}, "
+                            f"gcn_encode={overall_avg['gcn_encode']*1000:.3f}, "
+                            f"actor_head={overall_avg['actor_head']*1000:.3f}"
+                        )
                     break
                 query_graph = json.loads(msg)
                 print(query_graph)
-                next_variable = select_vertex_gnn_conservative(query_graph, model)
-                service.send_message(next_variable)
-                print(next_variable)
+                next_variable, timing = select_vertex_gnn(
+                    query_graph, model, timing_enabled=TIMING_ENABLED
+                )
+                if TIMING_ENABLED and timing:
+                    for key in query_totals:
+                        query_totals[key] += timing.get(key, 0.0)
+                    logger.info(
+                        "Selection timing (ms): edge_mlp=%.3f, gcn_encode=%.3f, actor_head=%.3f",
+                        timing.get("edge_mlp", 0.0) * 1000,
+                        timing.get("gcn_encode", 0.0) * 1000,
+                        timing.get("actor_head", 0.0) * 1000,
+                    )
+                response = str(next_variable)
+                service.send_message(response)
+                print("Select:", next_variable)
 
 
 # 设置日志
@@ -313,14 +308,23 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# set_seed(41)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
+TIMING_ENABLED = True
 UDS_CPP_PATH = "/tmp/apex_cpp.sock"
 UDS_PY_PATH = "/tmp/apex_py.sock"
 
 service = uds_service.UDSService(UDS_PY_PATH, UDS_CPP_PATH)
 max_id = int(service.receive_message())
+
+max_id = 8604
+# wdbench 8604
+# wgpb 2101
+# max_id = 9604
 
 model = GraphActorCritic(device, max_id=max_id).to(device)
 len_reward_rms = RunningMeanStd()
@@ -329,6 +333,7 @@ time_reward_rms = RunningMeanStd()
 actor_params = list(model.actor.parameters())
 critic_params = list(model.critic.parameters())
 
+# wgpb -> wdbench: 1e-5
 optimizer = torch.optim.Adam(
     [
         {"params": actor_params, "lr": 1e-4},

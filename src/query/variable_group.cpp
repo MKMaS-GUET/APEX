@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <execution>
+#include <iostream>
 #include <thread>
 
 VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
@@ -12,44 +13,18 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
     level_ = -1;
     at_end_ = false;
 
-    bool use_optimization = true;
-
     std::vector<uint> levels;
-    if (use_optimization) {
-        std::vector<uint> intersection = group.dependencies[0];
-
-        for (size_t i = 1; i < group.dependencies.size(); ++i) {
-            if (!group.dependencies[i].empty()) {
-                std::vector<uint> temp;
-                std::vector<uint> sorted_ancestor = group.dependencies[i];
-                std::sort(intersection.begin(), intersection.end());
-                std::sort(sorted_ancestor.begin(), sorted_ancestor.end());
-
-                set_intersection(intersection.begin(), intersection.end(), sorted_ancestor.begin(),
-                                 sorted_ancestor.end(), back_inserter(temp));
-                intersection = std::move(temp);
-            }
-        }
-
-        std::sort(intersection.begin(), intersection.end());
-        uint max_level = intersection.back();
-
+    {
         phmap::flat_hash_set<uint> ancestor_union;
-        ancestor_union.insert(max_level);
-        for (const auto& an : group.dependencies) {
-            for (auto a : an) {
-                if (a != max_level)
-                    ancestor_union.insert(a);
-                else
-                    break;
-            }
-        }
-        levels = std::vector<uint>(ancestor_union.begin(), ancestor_union.end());
-        std::sort(levels.begin(), levels.end());
-    } else {
-        for (uint i = 0; i < result_map.size(); i++) {
-            if (result_map[i].size())
-                levels.push_back(i);
+        for (const auto& deps : group.dependencies)
+            for (uint a : deps)
+                ancestor_union.insert(a);
+
+        if (ancestor_union.empty()) {
+            levels.push_back(0);
+        } else {
+            levels.assign(ancestor_union.begin(), ancestor_union.end());
+            std::sort(levels.begin(), levels.end());
         }
     }
 
@@ -159,8 +134,8 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
         return;
 
     uint first_map_size = result_map_[0]->begin()->second->size();
-    uint range_end = range.second == __UINT32_MAX__ ? first_map_size : std::min(range.second, first_map_size);
-    uint range_begin = std::min(range.first, range_end);
+    uint range_end = first_map_size;
+    uint range_begin = 0;
 
     if (range_begin >= range_end) {
         results_.Clear();
@@ -238,7 +213,7 @@ VariableGroup::VariableGroup(ResultMap& map, Group group) {
         results_.AppendRowSpan(&v);
 }
 
-VariableGroup::VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group group) {
+VariableGroup::VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group group, uint max_threads) {
     var_offsets = group.var_offsets;
     key_offsets = group.key_offsets;
 
@@ -259,15 +234,49 @@ VariableGroup::VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group 
     auto* values_ptr = all_values->data() + start;
 
     constexpr uint kParallelThreshold = 2048;
-    if (total < kParallelThreshold) {
-        for (uint i = 0; i < total; ++i)
-            results_.AppendRowSpan(&values_ptr[i]);
-    } else {
-        std::vector<uint> flat(total);
-        std::transform(std::execution::par_unseq, values_ptr, values_ptr + total, flat.begin(),
-                       [](uint value) { return value; });
-        results_.AppendFlat(flat);
+    if (total < kParallelThreshold || max_threads <= 1) {
+        results_.AppendRows(values_ptr, total);
+        return;
     }
+
+    const uint kTargetChunk = 4096;
+    uint num_threads = std::min<uint>(max_threads, (total + kTargetChunk - 1) / kTargetChunk);
+    // num_threads = max_threads;
+    if (num_threads <= 1) {
+        results_.AppendRows(values_ptr, total);
+        return;
+    }
+
+    const uint chunk_size = (total + num_threads - 1) / num_threads;
+
+    std::vector<std::thread> threads;
+    std::vector<std::vector<uint>> thread_results(num_threads);
+    threads.reserve(num_threads);
+
+    uint launched_threads = 0;
+    for (; launched_threads < num_threads; ++launched_threads) {
+        uint t_start = launched_threads * chunk_size;
+        if (t_start >= total)
+            break;
+        uint t_end = std::min(total, t_start + chunk_size);
+
+        auto& buffer = thread_results[launched_threads];
+        buffer.resize(t_end - t_start);
+
+        threads.emplace_back([values_ptr, t_start, t_end, &buffer]() {
+            std::copy(values_ptr + t_start, values_ptr + t_end, buffer.begin());
+        });
+    }
+
+    thread_results.resize(launched_threads);
+
+    for (auto& th : threads) {
+        if (th.joinable())
+            th.join();
+    }
+
+    for (auto& res : thread_results)
+        results_.AppendFlat(res);
 }
 
 VariableGroup::~VariableGroup() {

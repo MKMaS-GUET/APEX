@@ -4,6 +4,7 @@
 #include "index/index_retriever.hpp"
 #include "pre_processor.hpp"
 #include "result_map.hpp"
+#include "utils/chunked_vector.hpp"
 
 class ResultGenerator {
     uint max_threads_ = 32;
@@ -14,7 +15,7 @@ class ResultGenerator {
 
     std::vector<std::vector<std::pair<uint, uint>>> result_relation_;
 
-    std::vector<std::vector<std::vector<uint>>*> results_;
+    std::vector<ChunkedVector*> results_;
 
     uint limit_;
 
@@ -45,10 +46,10 @@ class ResultGenerator {
        public:
         iterator() : results_ptr(nullptr), outer_idx(0), inner_idx(0) {}
 
-        iterator(std::vector<std::vector<std::vector<uint>>*>* results_ptr, uint o_idx, uint i_idx)
+        iterator(std::vector<ChunkedVector*>* results_ptr, size_t o_idx, size_t i_idx)
             : results_ptr(results_ptr), outer_idx(o_idx), inner_idx(i_idx) {}
 
-        std::vector<uint>* operator*() { return &results_ptr->at(outer_idx)->at(inner_idx); }
+        std::span<const uint> operator*() { return results_ptr->at(outer_idx)->RowAt(inner_idx); }
 
         iterator& operator++() {
             // 移动到下一个元素
@@ -79,9 +80,9 @@ class ResultGenerator {
         bool operator!=(const iterator& other) const { return !(*this == other); }
 
        private:
-        std::vector<std::vector<std::vector<uint>>*>* results_ptr;
-        uint outer_idx;  // 当前results_中的索引
-        uint inner_idx;  // 当前二维向量中的索引
+        std::vector<ChunkedVector*>* results_ptr;
+        size_t outer_idx;  // 当前results_中的索引
+        size_t inner_idx;  // 当前二维向量中的索引
     };
 
     iterator begin();

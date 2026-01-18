@@ -36,15 +36,27 @@ ResultMapIterator::ResultMapIterator(std::vector<ResultMap*> result_map,
     candidate_idx_[0] = first_variable_range.first;
 }
 
-void ResultMapIterator::Start(std::vector<std::vector<uint>>* results, std::atomic<uint>* count, uint limit) {
+void ResultMapIterator::Start(ChunkedVector* results, std::atomic<uint>* count, uint limit) {
     if (zero_result_)
         return;
 
-    uint est_size = first_variable_range_.second - first_variable_range_.first;
-    for (uint i = 1; i < result_map_.size(); i++)
-        est_size += result_map_[i]->size();
-    est_size = (est_size > limit) ? limit : est_size;
-    results->reserve(est_size);
+    results->Reset(result_map_.size());
+
+    const uint kFlushStride = 64;
+    uint local_batch = 0;
+
+    auto flush = [&]() {
+        if (local_batch) {
+            count->fetch_add(local_batch, std::memory_order_relaxed);
+            local_batch = 0;
+        }
+    };
+
+    auto reached_limit = [&](uint pending) -> bool {
+        if (limit == __UINT32_MAX__)
+            return false;
+        return count->load(std::memory_order_relaxed) + pending >= limit;
+    };
 
     while (true) {
         if (at_end_) {
@@ -54,21 +66,25 @@ void ResultMapIterator::Start(std::vector<std::vector<uint>>* results, std::atom
             Next();
         } else {
             if (variable_id_ == int(result_map_.size() - 1)) {
-                results->push_back(current_result_);
-                if (results->size() != 0 && results->size() % 10 == 0) {
-                    count->fetch_add(10);
-                    if (count->load(std::memory_order_relaxed) >= limit)
-                        break;
-                }
+                results->AppendRowSpan(current_result_.data());
+                ++local_batch;
+
+                if (local_batch >= kFlushStride)
+                    flush();
+
+                if (reached_limit(local_batch))
+                    break;
+
                 Next();
             } else {
-                if (variable_id_ == 0)
-                    if (count->load(std::memory_order_relaxed) >= limit)
-                        break;
+                if (variable_id_ == 0 && reached_limit(local_batch))
+                    break;
                 Down();
             }
         }
     }
+
+    flush();
 }
 
 void ResultMapIterator::Up() {

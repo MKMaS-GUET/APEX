@@ -42,6 +42,9 @@ class SubQueryExecutor {
     std::chrono::duration<double, std::milli> execute_cost_;
     std::chrono::duration<double, std::milli> build_group_cost_;
 
+    long CPG_value_size;
+    long CPG_total_size;
+
     void UpdateStatus(std::string variable, uint result_len);
 
     uint FirstVariableJoin(std::vector<Variable*> vars, ResultMap& result);
@@ -58,7 +61,7 @@ class SubQueryExecutor {
     uint ParallelJoin(std::vector<Variable*> vars,
                       std::vector<VariableGroup*> variable_groups,
                       ResultMap& result,
-                      bool use_work_stealing);
+                      bool use_work_sharing);
 
     std::vector<VariableGroup::Group> GetVariableGroup();
 
@@ -113,6 +116,8 @@ class SubQueryExecutor {
     bool query_end();
 
     bool ordering_complete();
+
+    void CPGSize();
 };
 
 #endif  // QUERY_EXECUTOR_HPP

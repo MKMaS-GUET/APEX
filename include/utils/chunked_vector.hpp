@@ -18,6 +18,8 @@ class ChunkedVector {
 
     void AppendRowSpan(const uint* data);
 
+    void AppendRows(const uint* data, size_t row_count);
+
     void AppendFlat(const std::vector<uint>& flat);
 
     std::span<const uint> RowAt(size_t index) const;

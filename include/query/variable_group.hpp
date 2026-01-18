@@ -108,7 +108,7 @@ class VariableGroup {
 
     VariableGroup(ResultMap& map, Group group);
 
-    VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group group);
+    VariableGroup(ResultMap& map, std::pair<uint, uint> range, Group group, uint max_threads);
 
     ~VariableGroup();
 

@@ -1,12 +1,26 @@
 import logging
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import random
+import numpy as np
 
 from torch_geometric.nn import GCNConv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def normalize(x):
@@ -49,6 +63,7 @@ class GraphActorCritic(nn.Module):
         self.hidden_dim = hidden_dim
         self.max_id = max_id
         self.device = device
+        self.device_type = self.device.type
         # 边特征嵌入层（两个离散特征：edge_id, edge_pos）
         # 之后不再聚合到节点特征中，而是映射成边权重传入GCNConv
         self.edge_id_embed = nn.Embedding(self.max_id + 1, 8)
@@ -84,6 +99,10 @@ class GraphActorCritic(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
+    def _sync_if_cuda(self):
+        if torch.cuda.is_available() and self.device_type == "cuda":
+            torch.cuda.synchronize(self.device)
+
     def build_node_features(self, query_graph):
         """构建节点特征（不再包含边特征聚合），并移动到设备"""
 
@@ -101,33 +120,12 @@ class GraphActorCritic(nn.Module):
         est_size = normalize(est_size_raw)
         degree = normalize(degree_raw)
 
-        # degree_less_3 = True
-        # for d in query_graph["degree"]:
-        #     if d > 2:
-        #         degree_less_3 = False
-
-        # if not degree_less_3:
-        #     degree = normalize(
-        #         torch.tensor(
-        #             query_graph["degree"], dtype=torch.float32, device=self.device
-        #         )
-        #     )
-        # else:
-        #     degree = torch.tensor(
-        #         torch.full((len(query_graph["degree"]),), 1.0),
-        #         dtype=torch.float32,
-        #         device=self.device,
-        #     )
-
-        # print("est_size: ", est_size)
-        # print("degree: ", degree)
-        
         # 拼接所有节点特征（当前仅3维）
         node_features = torch.stack([status, est_size, degree], dim=1)  # [num_nodes, 3]
 
         return node_features
 
-    def build_edge_index_and_weight(self, query_graph):
+    def build_edge_index_and_weight(self, query_graph, timings=None):
         edges = query_graph.get("edges", [])
         if not edges:
             edge_index = torch.empty((2, 0), dtype=torch.long, device=self.device)
@@ -144,18 +142,33 @@ class GraphActorCritic(nn.Module):
             edge_features, dtype=torch.long, device=self.device
         )
         # edge_features: [num_edges, 2] -> (id, pos)
+        edge_mlp_start = None
+        if timings is not None:
+            self._sync_if_cuda()
+            edge_mlp_start = time.perf_counter()
         id_embed = self.edge_id_embed(edge_features_tensor[:, 0])
         pos_embed = self.edge_pos_embed(edge_features_tensor[:, 1])
         edge_feat = torch.cat([id_embed, pos_embed], dim=1)
         edge_weight = self.edge_weight_mlp(edge_feat).squeeze(-1)  # [num_edges]
+        if timings is not None and edge_mlp_start is not None:
+            self._sync_if_cuda()
+            timings["edge_mlp"] = timings.get("edge_mlp", 0.0) + (
+                time.perf_counter() - edge_mlp_start
+            )
         return edge_index, edge_weight
 
-    def _encode_graph(self, query_graph, need_value: bool = True):
+    def _encode_graph(self, query_graph, need_value: bool = True, timings=None):
         node_features = self.build_node_features(query_graph)
         num_nodes = node_features.shape[0]
-        edge_index, edge_weight = self.build_edge_index_and_weight(query_graph)
+        edge_index, edge_weight = self.build_edge_index_and_weight(
+            query_graph, timings=timings
+        )
         if edge_weight is not None and edge_weight.numel() == 0:
             edge_weight = None
+        gcn_start = None
+        if timings is not None:
+            self._sync_if_cuda()
+            gcn_start = time.perf_counter()
         x = F.relu(self.conv1(node_features, edge_index, edge_weight))
         x = F.relu(self.conv2(x, edge_index, edge_weight))  # [num_nodes, hidden_dim]
 
@@ -167,6 +180,11 @@ class GraphActorCritic(nn.Module):
         combined_features = torch.cat(
             [x, global_features], dim=1
         )  # [num_nodes, hidden_dim * 2]
+        if timings is not None and gcn_start is not None:
+            self._sync_if_cuda()
+            timings["gcn_encode"] = timings.get("gcn_encode", 0.0) + (
+                time.perf_counter() - gcn_start
+            )
 
         if not need_value:
             return combined_features, None
@@ -176,21 +194,37 @@ class GraphActorCritic(nn.Module):
         return combined_features, state_value.squeeze()
 
     def forward(self, query_graph):
-        combined_features, state_value = self._encode_graph(query_graph, need_value=True)
+        combined_features, state_value = self._encode_graph(
+            query_graph, need_value=True
+        )
         # Actor输出
         action_logits = self.actor(combined_features).squeeze(-1)  # [num_nodes]
 
         return action_logits, state_value.squeeze()
 
-    def sample_action_logits(self, query_graph, num_samples: int):
+    def sample_action_logits(self, query_graph, num_samples: int, enable_timing=False):
         """
         并行生成多次带 dropout 的 actor logits，用于 MC Dropout 估计。
         """
-        combined_features, _ = self._encode_graph(query_graph, need_value=False)
+        timings = None
+        if enable_timing:
+            timings = {"edge_mlp": 0.0, "gcn_encode": 0.0, "actor_head": 0.0}
+        combined_features, _ = self._encode_graph(
+            query_graph, need_value=False, timings=timings
+        )
         # 扩展批次，把同一个图复制 num_samples 份，然后一次性通过 actor
         repeated = combined_features.unsqueeze(0).expand(num_samples, -1, -1)
         flat_features = repeated.reshape(-1, combined_features.size(1))  # [T*N, feat]
-        logits = self.actor(flat_features).squeeze(-1).view(
-            num_samples, combined_features.size(0)
+        actor_start = None
+        if timings is not None:
+            self._sync_if_cuda()
+            actor_start = time.perf_counter()
+        logits = (
+            self.actor(flat_features)
+            .squeeze(-1)
+            .view(num_samples, combined_features.size(0))
         )
-        return logits, None
+        if timings is not None and actor_start is not None:
+            self._sync_if_cuda()
+            timings["actor_head"] += time.perf_counter() - actor_start
+        return logits, timings

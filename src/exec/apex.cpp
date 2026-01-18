@@ -32,7 +32,7 @@ void Create(const std::string& db_name, const std::string& data_file) {
     std::cout << "create " << db_name << " takes " << diff.count() << " ms." << std::endl;
 }
 
-void Query(const std::string& db_path, const std::string& query_path) {
+void Query(const std::string& db_path, const std::string& query_path, uint max_threads) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         double traverse_time = 0;
@@ -57,7 +57,6 @@ void Query(const std::string& db_path, const std::string& query_path) {
                 std::cout << sparql << std::endl;
             }
 
-            uint max_threads = 32;
             SPARQLParser parser = SPARQLParser(sparql);
             QueryExecutor executor = QueryExecutor(index, parser, max_threads);
             executor.Query();
@@ -82,7 +81,7 @@ void Query(const std::string& db_path, const std::string& query_path) {
     }
 }
 
-void Train(const std::string& db_path, const std::string& query_path) {
+void Train(const std::string& db_path, const std::string& query_path, uint max_threads) {
     if (db_path != "" and query_path != "") {
         bool print = false;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
@@ -106,7 +105,6 @@ void Train(const std::string& db_path, const std::string& query_path) {
                 std::cout << i + 1 << " -----------------------------------------------------------------" << std::endl;
                 std::cout << sparql << std::endl;
             }
-            uint max_threads = 32;
             SPARQLParser parser = SPARQLParser(sparql);
             QueryExecutor executor = QueryExecutor(index, parser, max_threads);
             executor.Train(service);
@@ -116,10 +114,12 @@ void Train(const std::string& db_path, const std::string& query_path) {
     }
 }
 
-void Test(const std::string& db_path, const std::string& query_path) {
+void Test(const std::string& db_path, const std::string& query_path, uint max_threads) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         double gen_plan_time = 0;
+        double traverse_time = 0;
+        double gen_result_time = 0;
         bool print = false;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
         std::ifstream in(query_path, std::ifstream::in);
@@ -143,7 +143,6 @@ void Test(const std::string& db_path, const std::string& query_path) {
                 std::cout << sparql << std::endl;
             }
 
-            uint max_threads = 32;
             SPARQLParser parser = SPARQLParser(sparql);
             QueryExecutor executor = QueryExecutor(index, parser, max_threads);
             executor.Test(service);
@@ -151,16 +150,20 @@ void Test(const std::string& db_path, const std::string& query_path) {
 
             std::cout << result_count << " result(s)." << std::endl;
             std::cout << "gen plan cost: " << executor.gen_plan_cost() << std::endl;
-            // std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
-            // std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
-            // std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
+            std::cout << "execute takes " << executor.execute_cost() << " ms." << std::endl;
+            std::cout << "build group takes " << executor.build_group_cost() << " ms." << std::endl;
+            std::cout << "gen result takes " << executor.gen_result_cost() << " ms." << std::endl;
             double query_time = executor.execute_cost() + executor.build_group_cost() + executor.gen_result_cost();
             gen_plan_time += executor.gen_plan_cost();
 
             std::cout << "query takes " << query_time << " ms." << std::endl;
 
+            traverse_time += executor.build_group_cost();
+            gen_result_time += executor.gen_result_cost();
             total_time += query_time;
         }
+        std::cout << "avg traverse time: " << traverse_time / sparqls.size() << " ms." << std::endl;
+        std::cout << "avg gen result time: " << gen_result_time / sparqls.size() << " ms." << std::endl;
         std::cout << "avg gen plan time: " << gen_plan_time / sparqls.size() << " ms." << std::endl;
         std::cout << "avg query time: " << total_time / sparqls.size() << " ms." << std::endl;
         exit(0);

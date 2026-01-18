@@ -1,6 +1,8 @@
 #include "query/result_generator.hpp"
 #include "query/result_map_iterator.hpp"
 
+#include <algorithm>
+
 ResultGenerator::ResultGenerator(std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
                                  uint limit,
                                  uint max_threads) {
@@ -22,37 +24,39 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
         result_map_p.push_back(&map);
     }
 
-    uint first_map_size = result_map[0].begin()->second->size();
-    uint total_range = 0;
-    if (first_variable_range.second == __UINT32_MAX__)
-        total_range = first_map_size;
-    else
-        total_range = first_variable_range.second - first_variable_range.first;
+    const uint first_map_size = result_map[0].begin()->second->size();
+    const uint range_end =
+        (first_variable_range.second == __UINT32_MAX__) ? first_map_size
+                                                        : std::min(first_variable_range.second, first_map_size);
+    const uint range_begin = std::min(first_variable_range.first, range_end);
+    const uint total_range = range_end > range_begin ? (range_end - range_begin) : 0;
+    if (total_range == 0)
+        return count_->load() >= limit_ && limit_ != __UINT32_MAX__;
 
-    if (total_range > first_map_size)
-        total_range = first_map_size;
-
-    uint num_threads = std::min(static_cast<uint>(total_range / 4), static_cast<uint>(max_threads_));
-    num_threads = max_threads_;
-    if (num_threads == 0) {
-        ResultMapIterator iter = ResultMapIterator(result_map_p, result_relation_, first_variable_range);
-        std::vector<std::vector<uint>>* results = new std::vector<std::vector<uint>>();
+    uint num_threads = (max_threads_ == 0) ? 0 : std::min<uint>(max_threads_, total_range);
+    // num_threads = max_threads_;
+    if (num_threads <= 1) {
+        ResultMapIterator iter = ResultMapIterator(result_map_p, result_relation_, {range_begin, range_end});
+        auto* results = new ChunkedVector(result_map.size());
         iter.Start(results, count_, limit_);
-        results_.push_back(results);
+        if (results->size())
+            results_.push_back(results);
+        else
+            delete results;
     } else {
-        uint chunk_size = total_range / num_threads;
+        uint chunk_size = (total_range + num_threads - 1) / num_threads;
 
-        // 存储线程和结果容器的数组
         std::vector<std::thread> threads;
-        std::vector<std::vector<std::vector<uint>>*> thread_results(num_threads);
-        // 创建并启动线程
+        std::vector<ChunkedVector*> thread_results(num_threads, nullptr);
         for (unsigned int i = 0; i < num_threads; ++i) {
-            uint start = first_variable_range.first + i * chunk_size;
-            uint end = (i == num_threads - 1) ? first_variable_range.second : start + chunk_size;
+            uint start = range_begin + i * chunk_size;
+            if (start >= range_end)
+                break;
+            uint end = std::min<uint>(range_end, start + chunk_size);
 
             threads.emplace_back([&, start, end, i]() {
                 ResultMapIterator iter(result_map_p, result_relation_, {start, end});
-                thread_results[i] = new std::vector<std::vector<uint>>();
+                thread_results[i] = new ChunkedVector(result_map.size());
                 iter.Start(thread_results[i], count_, limit_);
             });
         }
@@ -62,8 +66,10 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
 
         // 合并结果
         for (auto* res : thread_results) {
-            if (res && !res->empty())
+            if (res && res->size())
                 results_.push_back(res);
+            else
+                delete res;
         }
     }
     gen_cost_ += std::chrono::high_resolution_clock::now() - begin;
@@ -75,8 +81,10 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
 
 ResultGenerator::~ResultGenerator() {
     for (auto r_p : results_)
-        r_p->clear();
+        delete r_p;
     results_.clear();
+    delete count_;
+    count_ = nullptr;
 }
 
 double ResultGenerator::gen_cost() {
@@ -84,30 +92,32 @@ double ResultGenerator::gen_cost() {
 }
 
 ResultGenerator::iterator ResultGenerator::begin() {
-    uint o_idx = 0;
-    uint i_idx = 0;
+    size_t o_idx = 0;
+    size_t i_idx = 0;
     // 寻找第一个非空元素
-    while (o_idx < results_.size() && results_[o_idx]->empty())
+    while (o_idx < results_.size() && results_[o_idx]->size() == 0)
         ++o_idx;
     return iterator(&results_, o_idx, i_idx);
 }
 
 ResultGenerator::iterator ResultGenerator::end() {
-    // 找到limit_对应的位置
-    uint count = 0;
-    uint o_idx = 0;
-    uint i_idx = 0;
+    if (limit_ == __UINT32_MAX__)
+        return iterator(&results_, results_.size(), 0);
 
-    while (o_idx < results_.size() && count < limit_) {
-        uint remaining = limit_ - count;
-        uint current_size = results_[o_idx]->size();
+    uint remaining = limit_;
+    size_t o_idx = 0;
+    size_t i_idx = 0;
+
+    while (o_idx < results_.size() && remaining > 0) {
+        uint current_size = static_cast<uint>(results_[o_idx]->size());
 
         if (current_size <= remaining) {
-            count += current_size;
-            o_idx++;
+            remaining -= current_size;
+            ++o_idx;
             i_idx = 0;
         } else {
             i_idx = remaining;
+            remaining = 0;
             break;
         }
     }
@@ -118,6 +128,6 @@ ResultGenerator::iterator ResultGenerator::end() {
 uint ResultGenerator::ResultsSize() {
     uint count = 0;
     for (auto& r : results_)
-        count += r->size();
-    return count > limit_ ? limit_ : count;
+        count += static_cast<uint>(r->size());
+    return limit_ == __UINT32_MAX__ ? count : std::min(limit_, count);
 }

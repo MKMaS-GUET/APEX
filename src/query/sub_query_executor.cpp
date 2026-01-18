@@ -1,7 +1,14 @@
 #include <tbb/blocked_range.h>
+#include <tbb/combinable.h>
 #include <tbb/global_control.h>
 #include <tbb/parallel_for.h>
+#include <tbb/partitioner.h>
+#include <tbb/task_arena.h>
 #include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <iostream>
 #include <numeric>
 #include <random>
 #include <thread>
@@ -32,6 +39,9 @@ SubQueryExecutor::SubQueryExecutor(std::shared_ptr<IndexRetriever> index,
     execute_cost_ = std::chrono::duration<double, std::milli>(0);
     build_group_cost_ = std::chrono::duration<double, std::milli>(0);
     first_variable_range_ = {0, 0};
+
+    CPG_value_size = 0;
+    CPG_total_size = 0;
 
     if (pre_processor_.zero_result()) {
         zero_result_ = true;
@@ -78,7 +88,7 @@ std::string SubQueryExecutor::NextVarieble() {
         return pre_processor_.est_size(a) > pre_processor_.est_size(b);
     });
 
-    // // static greedy order
+    // static greedy order
     // std::sort(candidate_variable.begin(), candidate_variable.end(), [&](std::string a, std::string b) {
     //     return degrees[a] < degrees[b];
     // });
@@ -92,7 +102,7 @@ std::string SubQueryExecutor::NextVarieble() {
 
     std::string next_variable = top_candidates.back();
 
-    // std::vector<std::string> temp = {"?v2", "?v0", "?v1", "?v3"};
+    // std::vector<std::string> temp = {"?x1", "?x2", "?x4", "?x3"};
     // next_variable = temp[variable_id_];
 
     // std::cout << next_variable << std::endl;
@@ -129,9 +139,9 @@ uint SubQueryExecutor::JoinWorker(const std::vector<Variable*>& vars,
         if (intersection != nullptr) {
             if (!intersection->empty()) {
                 auto emplace_result = result.emplace(key, intersection);
-                if (emplace_result.second)
+                if (emplace_result.second) {
                     local_result_len += intersection->size();
-                else
+                } else
                     delete intersection;
             } else {
                 delete intersection;
@@ -254,7 +264,7 @@ uint SubQueryExecutor::JoinWorker(const std::vector<Variable*>& vars,
 uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
                                     std::vector<VariableGroup*> variable_groups,
                                     ResultMap& result,
-                                    bool use_work_stealing) {
+                                    bool use_work_sharing) {
     const uint group_cnt = variable_groups.size();
     if (group_cnt == 0)
         return 0;
@@ -271,31 +281,35 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
 
     uint max_size = 0;
     uint max_group_idx = 0;
-    uint max_join_cnt = 1;
     for (uint i = 0; i < group_cnt; i++) {
         uint size = variable_groups[i]->size();
         if (size == 0)
             return 0;
-        max_join_cnt *= size;
         if (size > max_size) {
             max_size = size;
             max_group_idx = i;
         }
     }
-
-    uint num_threads = std::min(static_cast<uint>(max_join_cnt / 32), static_cast<uint>(max_threads_));
+    uint thread_task_cnt = 32;
+    uint num_threads = std::min(static_cast<uint>(variable_groups[max_group_idx]->size() / thread_task_cnt),
+                                static_cast<uint>(max_threads_));
     if (num_threads <= 1)
         return JoinWorker(vars, variable_groups, result, variable_groups[max_group_idx]->begin(),
                           variable_groups[max_group_idx]->end(), max_group_idx, var_cnt, key_cnt);
 
-    if (use_work_stealing) {
-        const uint chunk_factor = 32;
-        uint target_chunks = std::max<uint>(num_threads * chunk_factor, num_threads);
+    if (use_work_sharing) {
+        uint target_chunks = num_threads * 32;
         uint chunk_size = (max_size + target_chunks - 1) / target_chunks;
-        if (chunk_size == 0)
-            chunk_size = 1;
+        if (chunk_size < 4)
+            chunk_size = 4;
 
         uint chunk_cnt = (max_size + chunk_size - 1) / chunk_size;
+
+        // uint chunk_size = 32;
+        // uint thread_chunk_cnt = 5;
+        // uint chunk_cnt = (variable_groups[max_group_idx]->size() + chunk_size - 1) / chunk_size;
+        // num_threads = std::min(static_cast<uint>(chunk_cnt / thread_chunk_cnt), static_cast<uint>(max_threads_));
+
         std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
         ranges.reserve(chunk_cnt);
 
@@ -307,14 +321,14 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
             auto chunk_end = base_begin + static_cast<std::ptrdiff_t>(end_idx);
             ranges.emplace_back(chunk_begin, chunk_end);
         }
-
+        // std::cout << num_threads << std::endl;
         std::atomic<size_t> next_range{0};
         std::atomic<uint> result_len = 0;
         std::vector<std::thread> threads;
         threads.reserve(num_threads);
 
         for (uint t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&]() {
+            threads.emplace_back([&, t]() {
                 uint local_result_len = 0;
                 while (true) {
                     size_t idx = next_range.fetch_add(1, std::memory_order_relaxed);
@@ -337,16 +351,23 @@ uint SubQueryExecutor::ParallelJoin(std::vector<Variable*> vars,
     std::atomic<uint> result_len = 0;
 
     std::vector<std::pair<VariableGroup::iterator, VariableGroup::iterator>> ranges;
-    auto begin_it = variable_groups[max_group_idx]->begin();
-    auto end_it = variable_groups[max_group_idx]->end();
-    uint chunk_size = max_size / num_threads;
+    auto base_begin = variable_groups[max_group_idx]->begin();
+    size_t total_size = variable_groups[max_group_idx]->size();
+    thread_task_cnt = (total_size + num_threads - 1) / num_threads;
 
     for (uint i = 0; i < num_threads; ++i) {
-        auto chunk_end = (i == num_threads - 1) ? end_it : begin_it + chunk_size;
-        ranges.emplace_back(begin_it, chunk_end);
-        begin_it = chunk_end;
-    }
+        size_t begin_idx = i * thread_task_cnt;
+        size_t end_idx = std::min<size_t>(total_size, (i + 1) * thread_task_cnt);
 
+        if (i == num_threads - 1)
+            end_idx = total_size;
+
+        if (begin_idx < end_idx) {
+            auto chunk_begin = base_begin + static_cast<std::ptrdiff_t>(begin_idx);
+            auto chunk_end = base_begin + static_cast<std::ptrdiff_t>(end_idx);
+            ranges.emplace_back(chunk_begin, chunk_end);
+        }
+    }
     std::mutex result_mutex;
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
@@ -515,11 +536,17 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
         } else {
             std::vector<uint> ancestor = group.dependencies.front();
             if (ancestor.size()) {
-                if (ancestor.front() != 0) {
-                    variable_groups.push_back(new VariableGroup(result_map_[ancestor.front()], group));
+                bool use_optimization = true;
+                if (use_optimization) {
+                    if (ancestor.front() != 0) {
+                        variable_groups.push_back(new VariableGroup(result_map_[ancestor.front()], group));
+                    } else {
+                        variable_groups.push_back(new VariableGroup(result_map_[ancestor.front()],
+                                                                    first_variable_range_, group, max_threads_));
+                    }
                 } else {
                     variable_groups.push_back(
-                        new VariableGroup(result_map_[ancestor.front()], first_variable_range_, group));
+                        new VariableGroup(result_map_, first_variable_range_, result_relation_, group, max_threads_));
                 }
             } else {
                 variable_groups.push_back(new VariableGroup(group));
@@ -533,38 +560,26 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
 }
 
 void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
-    // std::cout << "result_len: " << result_len << std::endl;
-
     zero_result_ = result_len ? false : true;
 
     if (variable_id_ == 0) {
         first_variable_result_len_ = result_len;
         batch_size_ = first_variable_result_len_ > result_limit_ ? result_limit_ : first_variable_result_len_;
-        if (result_limit_ != __UINT32_MAX__ && remaining_variables_.size() != 1) {
-            batch_size_ /= 10;
-            if (is_cycle_ && first_variable_result_len_ > 2000000)
-                batch_size_ = first_variable_result_len_ / 100;
+        if (remaining_variables_.size() != 1) {
+            if (result_limit_ != __UINT32_MAX__) {
+                batch_size_ /= 10;
+                if (is_cycle_ && first_variable_result_len_ > 2000000)
+                    batch_size_ = first_variable_result_len_ / 100;
 
-            // batch_size_ = first_variable_result_len_ > result_limit_ ? result_limit_ :
-            // first_variable_result_len_; if (is_cycle_ && first_variable_result_len_ > 2000000) {
-            //     batch_size_ = first_variable_result_len_ / 100;
-            // } else {
-            //     if (result_limit_ <= 1000)
-            //         batch_size_ = first_variable_result_len_;
-            //     if (batch_size_ < 20000) {
-            //         if (batch_size_ > 2)
-            //             batch_size_ = first_variable_result_len_ / 2;
-            //     } else {
-            //         batch_size_ /= 10;
-            //     }
-            // }
-            if (batch_size_ < 10) {
-                batch_size_ = first_variable_result_len_ / 5;
-                if (batch_size_ < 3)
-                    batch_size_ = first_variable_result_len_;
+                if (batch_size_ < 10) {
+                    batch_size_ = first_variable_result_len_ / 5;
+                    if (batch_size_ < 3)
+                        batch_size_ = first_variable_result_len_;
+                }
+            } else {
+                if (batch_size_ > 1000000)
+                    batch_size_ /= 2;
             }
-        } else {
-            batch_size_ = first_variable_result_len_;
         }
         first_variable_range_ = {0, batch_size_};
     }
@@ -591,9 +606,18 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
         plan_.push_back({variable, next_vars});
         for (auto& var : plan_.back().second)
             var->var_id = variable_id_;
+        std::vector<std::thread> vars_threads;
         for (auto& var : plan_.back().second) {
-            if (var->connection && var->connection->var_id == -1)
-                var->connection->is_none = true;
+            vars_threads.emplace_back([var]() {
+                if (var->connection && var->connection->var_id == -1)
+                    var->connection->is_none = true;
+                if (!var->is_none)
+                    var->PreRetrieve();
+            });
+        }
+        for (auto& th : vars_threads) {
+            if (th.joinable())
+                th.join();
         }
     } else {
         next_vars = plan_[variable_id_].second;
@@ -606,7 +630,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
         result_len = ParallelJoin(next_vars, variable_groups, result_map_[variable_id_], true);
     else
         result_len = FirstVariableJoin(next_vars, result_map_[variable_id_]);
-    // std::cout << result_len << std::endl;
+    // std::cout << "result_len: " << result_len << std::endl;
     for (auto& group : variable_groups)
         group->~VariableGroup();
     UpdateStatus(variable, result_len);
@@ -678,26 +702,14 @@ void SubQueryExecutor::Query() {
             std::cout << variable_id_ << " " << "Processing " << next_variable << " takes: " << time.count() << " ms"
                       << std::endl;
         }
+        // CPGSize();
         Reset();
     }
     PostProcess();
-    // for (const auto& rm : result_map_) {
-    //     // 哈希表自身开销（估算）
-    //     size += sizeof(rm) + rm.bucket_count() * (sizeof(void*) + sizeof(std::mutex));
-
-    //     for (const auto& [key, val_ptr] : rm) {
-    //         // key 内存
-    //         size += sizeof(key) + key.capacity() * sizeof(uint);
-
-    //         // value 指针本身占用
-    //         size += sizeof(val_ptr);
-
-    //         // value 指向的 vector 内存（如果非空）
-    //         if (val_ptr) {
-    //             size += sizeof(*val_ptr) + val_ptr->capacity() * sizeof(uint);
-    //         }
-    //     }
-    // }
+    // std::cout << "[Query] result_map_ value memory: " << CPG_value_size << " bytes ("
+    //           << CPG_value_size / 1024.0 / 1024.0 << " MB)" << std::endl;
+    // std::cout << "[Query] result_map_ total memory: " << CPG_total_size << " bytes ("
+    //           << CPG_total_size / 1024.0 / 1024.0 << " MB)" << std::endl;
 }
 
 void SubQueryExecutor::PostProcess() {
@@ -721,12 +733,12 @@ void SubQueryExecutor::PostProcess() {
             // auto begin = std::chrono::high_resolution_clock::now();
             ProcessNextVariable(variable_order_[id]);
             // std::chrono::duration<double, std::milli> time = std::chrono::high_resolution_clock::now() - begin;
-            // std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " <<
-            // time.count()
+            // std::cout << variable_id_ << " " << "Processing " << variable_order_[id] << " takes: " << time.count()
             //           << " ms" << std::endl;
             if (zero_result_)
                 break;
         }
+        // CPGSize();
         if (variable_id_ == variable_order_.size())
             if (result_generator_->Update(result_map_, first_variable_range_))
                 break;
@@ -741,6 +753,46 @@ uint SubQueryExecutor::ResultSize() {
     if (result_generator_)
         return result_generator_->ResultsSize();
     return 0;
+}
+
+void SubQueryExecutor::CPGSize() {
+    // Approximate memory usage for result_map_ keys and values.
+    uint64_t value_mem_bytes = 0;
+    uint64_t total_mem_bytes = 0;
+
+    constexpr uint32_t kSubmapCount = 1u << 7;  // parallel_flat_hash_map submaps
+
+    for (const auto& rm : result_map_) {
+        // Container object itself.
+        total_mem_bytes += sizeof(rm);
+
+        const uint64_t bucket_cnt = rm.bucket_count();  // slots across all submaps
+
+        // Slots + control bytes (ctrl byte per slot). value_type already holds key pointer pair.
+        total_mem_bytes += bucket_cnt * (sizeof(ResultMap::value_type) + 1);
+
+        // Internal locks for parallel_flat_hash_map.
+        total_mem_bytes += static_cast<uint64_t>(kSubmapCount) * sizeof(std::mutex);
+
+        for (const auto& [key, val_ptr] : rm) {
+            // Key dynamic storage (vector buffer).
+            total_mem_bytes += static_cast<uint64_t>(key.capacity()) * sizeof(uint);
+
+            // Value vector dynamic storage.
+            if (val_ptr) {
+                uint64_t val_bytes = sizeof(*val_ptr) + static_cast<uint64_t>(val_ptr->capacity()) * sizeof(uint);
+                value_mem_bytes += val_bytes;
+                total_mem_bytes += val_bytes;
+            }
+        }
+    }
+    CPG_value_size += value_mem_bytes;
+    CPG_total_size += total_mem_bytes;
+
+    std::cout << "[Query] result_map_ value memory: " << value_mem_bytes << " bytes ("
+              << value_mem_bytes / 1024.0 / 1024.0 << " MB)" << std::endl;
+    std::cout << "[Query] result_map_ total memory: " << total_mem_bytes << " bytes ("
+              << total_mem_bytes / 1024.0 / 1024.0 << " MB)" << std::endl;
 }
 
 SubQueryExecutor::~SubQueryExecutor() {

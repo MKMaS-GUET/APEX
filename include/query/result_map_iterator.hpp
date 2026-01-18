@@ -4,6 +4,7 @@
 #include "index/index_retriever.hpp"
 #include "pre_processor.hpp"
 #include "result_map.hpp"
+#include "utils/chunked_vector.hpp"
 
 class ResultMapIterator {
     int variable_id_;
@@ -38,7 +39,7 @@ class ResultMapIterator {
                       std::vector<std::vector<std::pair<uint, uint>>>& result_relation,
                       std::pair<uint, uint> first_variable_range);
 
-    void Start(std::vector<std::vector<uint>>* results, std::atomic<uint>* count, uint limit);
+    void Start(ChunkedVector* results, std::atomic<uint>* count, uint limit);
 };
 
 #endif
