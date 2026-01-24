@@ -13,18 +13,44 @@ VariableGroup::VariableGroup(std::vector<ResultMap>& result_map,
     level_ = -1;
     at_end_ = false;
 
-    std::vector<uint> levels;
-    {
-        phmap::flat_hash_set<uint> ancestor_union;
-        for (const auto& deps : group.dependencies)
-            for (uint a : deps)
-                ancestor_union.insert(a);
+    bool use_optimization = true;
 
-        if (ancestor_union.empty()) {
-            levels.push_back(0);
-        } else {
-            levels.assign(ancestor_union.begin(), ancestor_union.end());
-            std::sort(levels.begin(), levels.end());
+    std::vector<uint> levels;
+    if (use_optimization) {
+        std::vector<uint> intersection = group.dependencies[0];
+
+        for (size_t i = 1; i < group.dependencies.size(); ++i) {
+            if (!group.dependencies[i].empty()) {
+                std::vector<uint> temp;
+                std::vector<uint> sorted_ancestor = group.dependencies[i];
+                std::sort(intersection.begin(), intersection.end());
+                std::sort(sorted_ancestor.begin(), sorted_ancestor.end());
+
+                set_intersection(intersection.begin(), intersection.end(), sorted_ancestor.begin(),
+                                 sorted_ancestor.end(), back_inserter(temp));
+                intersection = std::move(temp);
+            }
+        }
+
+        std::sort(intersection.begin(), intersection.end());
+        uint max_level = intersection.back();
+
+        phmap::flat_hash_set<uint> ancestor_union;
+        ancestor_union.insert(max_level);
+        for (const auto& an : group.dependencies) {
+            for (auto a : an) {
+                if (a != max_level)
+                    ancestor_union.insert(a);
+                else
+                    break;
+            }
+        }
+        levels = std::vector<uint>(ancestor_union.begin(), ancestor_union.end());
+        std::sort(levels.begin(), levels.end());
+    } else {
+        for (uint i = 0; i < result_map.size(); i++) {
+            if (result_map[i].size())
+                levels.push_back(i);
         }
     }
 

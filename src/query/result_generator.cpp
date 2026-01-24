@@ -34,7 +34,7 @@ bool ResultGenerator::Update(std::vector<ResultMap>& result_map, std::pair<uint,
         return count_->load() >= limit_ && limit_ != __UINT32_MAX__;
 
     uint num_threads = (max_threads_ == 0) ? 0 : std::min<uint>(max_threads_, total_range);
-    // num_threads = max_threads_;
+    num_threads = max_threads_;
     if (num_threads <= 1) {
         ResultMapIterator iter = ResultMapIterator(result_map_p, result_relation_, {range_begin, range_end});
         auto* results = new ChunkedVector(result_map.size());

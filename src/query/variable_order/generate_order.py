@@ -231,15 +231,14 @@ def select_vertex_gnn(
         query_graph, T, enable_timing=timing_enabled
     )  # [T, num_nodes]
 
-    S = sample_logits[:, candidate_indices]  # [T, K]
+    S = sample_logits[:, candidate_indices]
 
     # 把 logit 变成 cost：C = -logit
     C = -S
     mu = C.mean(dim=0)  # [K]
     sigma = C.std(dim=0, unbiased=False)  # [K]
-    score = mu + fs * sigma  # [K]  <- Roq-style μ + fσ
+    score = mu + fs * sigma  # [K]
 
-    # 可选：如果最优和次优 score 太接近，认为“不确定”，返回 none 走你的 fallback
     if score_gap_tau > 0 and score.numel() >= 2:
         best2, _ = torch.topk(-score, k=2)  # -score 越大越好 <=> score 越小越好
         gap = (best2[0] - best2[1]).item()
@@ -309,7 +308,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# set_seed(41)
+# set_seed(42)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
@@ -321,7 +320,7 @@ UDS_PY_PATH = "/tmp/apex_py.sock"
 service = uds_service.UDSService(UDS_PY_PATH, UDS_CPP_PATH)
 max_id = int(service.receive_message())
 
-max_id = 8604
+# max_id = 8604
 # wdbench 8604
 # wgpb 2101
 # max_id = 9604

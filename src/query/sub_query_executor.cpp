@@ -102,10 +102,12 @@ std::string SubQueryExecutor::NextVarieble() {
 
     std::string next_variable = top_candidates.back();
 
-    // std::vector<std::string> temp = {"?x1", "?x2", "?x4", "?x3"};
+    // std::vector<std::string> temp = {"?x9", "?x5", "?x6", "?x10", "?x3", "?x4", "?x8", "?x1", "?x2", "?x7"};
+    // std::vector<std::string> temp = {"?x3", "?x4", "?x2", "?x1"};
+    // std::vector<std::string> temp = {"?name1", "?a1", "?movie", "?a2", "?name2"};
+    // std::vector<std::string> temp = {"?name2", "?a2", "?movie", "?a1", "?name1"};
     // next_variable = temp[variable_id_];
 
-    // std::cout << next_variable << std::endl;
     return next_variable;
 }
 
@@ -537,6 +539,8 @@ std::vector<VariableGroup*> SubQueryExecutor::GetResultRelationAndVariableGroup(
             std::vector<uint> ancestor = group.dependencies.front();
             if (ancestor.size()) {
                 bool use_optimization = true;
+                // if (variable_id_ == 3 || variable_id_ == 4)
+                //     use_optimization = false;
                 if (use_optimization) {
                     if (ancestor.front() != 0) {
                         variable_groups.push_back(new VariableGroup(result_map_[ancestor.front()], group));
@@ -577,8 +581,8 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
                         batch_size_ = first_variable_result_len_;
                 }
             } else {
-                if (batch_size_ > 1000000)
-                    batch_size_ /= 2;
+                // if (first_variable_result_len_ > 1000000)
+                //     batch_size_ /= 2;
             }
         }
         first_variable_range_ = {0, batch_size_};
@@ -589,6 +593,7 @@ void SubQueryExecutor::UpdateStatus(std::string variable, uint result_len) {
 
     // if (pre_processor_.use_order_generator())
     pre_processor_.UpdateQueryGraph(variable, result_len);
+    // std::cout << pre_processor_.query_graph() << std::endl;
 
     variable_id_++;
     remaining_variables_.erase(variable);
@@ -630,7 +635,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
         result_len = ParallelJoin(next_vars, variable_groups, result_map_[variable_id_], true);
     else
         result_len = FirstVariableJoin(next_vars, result_map_[variable_id_]);
-    // std::cout << "result_len: " << result_len << std::endl;
+    std::cout << "result_len: " << result_len << std::endl;
     for (auto& group : variable_groups)
         group->~VariableGroup();
     UpdateStatus(variable, result_len);
