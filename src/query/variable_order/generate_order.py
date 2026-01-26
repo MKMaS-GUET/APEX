@@ -323,7 +323,7 @@ max_id = int(service.receive_message())
 # max_id = 8604
 # wdbench 8604
 # wgpb 2101
-# max_id = 9604
+# dbpedia 68687
 
 model = GraphActorCritic(device, max_id=max_id).to(device)
 len_reward_rms = RunningMeanStd()

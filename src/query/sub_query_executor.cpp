@@ -635,7 +635,7 @@ uint SubQueryExecutor::ProcessNextVariable(std::string variable) {
         result_len = ParallelJoin(next_vars, variable_groups, result_map_[variable_id_], true);
     else
         result_len = FirstVariableJoin(next_vars, result_map_[variable_id_]);
-    std::cout << "result_len: " << result_len << std::endl;
+    // std::cout << "result_len: " << result_len << std::endl;
     for (auto& group : variable_groups)
         group->~VariableGroup();
     UpdateStatus(variable, result_len);
