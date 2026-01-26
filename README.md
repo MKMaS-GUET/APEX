@@ -19,7 +19,7 @@ It supports variable-wise parallel execution and dynamic variable ordering, and 
 1. Clone this project
 
 ```shell
-git clone git@github.com:MKMaS-GUET/RDF-TDAA.git
+git clone git@github.com:MKMaS-GUET/APEX.git
 git submodule update --init
 ```
 
