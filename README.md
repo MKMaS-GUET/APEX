@@ -20,10 +20,16 @@ It supports variable-wise parallel execution and dynamic variable ordering, and 
 
 ```shell
 git clone git@github.com:MKMaS-GUET/APEX.git
-git submodule update --init
 ```
 
-2. Build this project
+2. Install dependicies
+
+```
+git submodule update --init
+sudo apt install libtbb-dev
+```
+
+3. Build this project
 
 ```shell
 cmake -B build -DCMAKE_BUILD_TYPE=Release

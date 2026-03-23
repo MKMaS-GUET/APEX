@@ -1,6 +1,9 @@
 #ifndef QUERY_EXECUTOR_HPP
 #define QUERY_EXECUTOR_HPP
 
+#include <cstdint>
+#include <functional>
+#include <limits>
 #include <vector>
 
 #include "parser/sparql_parser.hpp"
@@ -27,6 +30,14 @@ class QueryExecutor {
     bool IsCycleGraph(const phmap::flat_hash_map<std::string, std::vector<std::string>>& adj_list);
 
    public:
+    struct ResultStreamStats {
+        uint64_t row_count = 0;
+        uint64_t returned_row_count = 0;
+        uint64_t non_empty_cells = 0;
+        uint64_t total_chars = 0;
+        bool truncated = false;
+    };
+
     QueryExecutor(std::shared_ptr<IndexRetriever> index, SPARQLParser parser, uint max_threads);
 
     ~QueryExecutor();
@@ -38,6 +49,12 @@ class QueryExecutor {
     void Test(UDSService& service);
 
     uint PrintResult(bool print);
+
+    ResultStreamStats StreamResultRows(
+        const std::function<void(const std::vector<std::string>&)>& on_row,
+        uint64_t max_rows = std::numeric_limits<uint64_t>::max());
+
+    std::vector<std::vector<std::string>> ResultRows();
 
     double preprocess_cost();
 

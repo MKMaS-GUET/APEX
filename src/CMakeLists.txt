@@ -15,4 +15,15 @@ target_link_libraries(${this} PUBLIC phmap PRIVATE streamvbyte TBB::tbb)
 set_target_properties(${this} PROPERTIES LINKER_LANGUAGE CXX)
 
 add_executable(apex exec/main.cpp)
-target_link_libraries(apex apex_lib)
+target_link_libraries(apex PRIVATE apex_lib ${SYSTEM_STDCXX_LIBRARY} ${SYSTEM_GCC_S_LIBRARY})
+
+find_package(Threads REQUIRED)
+add_executable(apex_server interface/server.cpp)
+target_link_libraries(
+        apex_server
+        PRIVATE
+        apex_lib
+        httplib::httplib
+        Threads::Threads
+        ${SYSTEM_STDCXX_LIBRARY}
+        ${SYSTEM_GCC_S_LIBRARY})

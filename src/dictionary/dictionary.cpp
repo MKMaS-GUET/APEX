@@ -33,6 +33,7 @@ Dictionary::Dictionary(std::string& dict_path, bool print) : dict_path_(dict_pat
     predicate_cnt_ = menagement_data[1];
     object_cnt_ = menagement_data[2];
     shared_cnt_ = menagement_data[3];
+    triple_cnt_ = menagement_data[7];
 
     id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
     LoadPredicate(id2predicate_, predicate2id_);
@@ -206,6 +207,10 @@ uint Dictionary::object_cnt() {
 
 uint Dictionary::shared_cnt() {
     return shared_cnt_;
+}
+
+uint Dictionary::triple_cnt() {
+    return triple_cnt_;
 }
 
 uint Dictionary::max_id() {

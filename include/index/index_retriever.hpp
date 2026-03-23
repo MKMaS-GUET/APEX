@@ -175,16 +175,34 @@ class IndexRetriever {
     uint GetByOSize(uint oid);
 
     /**
+     * @brief Retrieves the count of subjects.
+     * @return The count of subjects.
+     */
+    uint subject_cnt();
+
+    /**
      * @brief Retrieves the count of predicates.
      * @return The count of predicates.
      */
     uint predicate_cnt();
 
     /**
+     * @brief Retrieves the count of objects.
+     * @return The count of objects.
+     */
+    uint object_cnt();
+
+    /**
      * @brief Retrieves the count of shared entities.
      * @return The count of shared resources.
      */
     uint shared_cnt();
+
+    /**
+     * @brief Retrieves the count of triples.
+     * @return The count of triples.
+     */
+    uint triple_cnt();
 };
 
 #endif

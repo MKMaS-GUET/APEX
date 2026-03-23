@@ -71,10 +71,11 @@ class Dictionary {
     std::string dict_path_;
     uint max_threads = 6;
 
-    ulong subject_cnt_;
-    ulong predicate_cnt_;
-    ulong object_cnt_;
-    ulong shared_cnt_;
+    ulong subject_cnt_ = 0;
+    ulong predicate_cnt_ = 0;
+    ulong object_cnt_ = 0;
+    ulong shared_cnt_ = 0;
+    ulong triple_cnt_ = 0;
 
     MMap<std::size_t> subject_hashes_;
     MMap<std::size_t> object_hashes_;
@@ -115,6 +116,8 @@ class Dictionary {
     uint object_cnt();
 
     uint shared_cnt();
+
+    uint triple_cnt();
 
     uint max_id();
 };

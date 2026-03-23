@@ -217,10 +217,22 @@ uint IndexRetriever::GetByOSize(uint oid) {
     return 0;
 }
 
+uint IndexRetriever::subject_cnt() {
+    return dict_.subject_cnt();
+}
+
 uint IndexRetriever::predicate_cnt() {
     return dict_.predicate_cnt();
 }
 
+uint IndexRetriever::object_cnt() {
+    return dict_.object_cnt();
+}
+
 uint IndexRetriever::shared_cnt() {
     return dict_.shared_cnt();
+}
+
+uint IndexRetriever::triple_cnt() {
+    return dict_.triple_cnt();
 }

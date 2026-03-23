@@ -1,2 +1,3 @@
 add_subdirectory(phmap)
 add_subdirectory(streamvbyte)
+add_subdirectory(httplib)

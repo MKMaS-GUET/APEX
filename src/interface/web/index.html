@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>APEX Query Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="background-orb orb-a"></div>
+  <div class="background-orb orb-b"></div>
+
+  <main class="layout">
+    <header class="hero card">
+      <div>
+        <p class="eyebrow">APEX RDF Platform</p>
+        <h1>RDF Studio</h1>
+        <p class="subtitle">数据库管理、数据统计、SPARQL 查询可视化一体化界面</p>
+      </div>
+      <div class="hero-actions">
+        <button id="refreshAllBtn" class="btn btn-secondary">刷新全部</button>
+        <a class="btn btn-ghost" href="/healthz" target="_blank" rel="noreferrer">健康检查</a>
+      </div>
+    </header>
+
+    <section class="panel card db-panel">
+      <div class="panel-head">
+        <h2>数据库管理</h2>
+        <span class="pill" id="activeDbBadge">未激活数据库</span>
+      </div>
+
+      <div class="stats-grid" id="dbStatsGrid">
+        <article class="metric-card metric-subjects">
+          <h3>Subjects</h3>
+          <p id="statSubjects">-</p>
+        </article>
+        <article class="metric-card metric-predicates">
+          <h3>Predicates</h3>
+          <p id="statPredicates">-</p>
+        </article>
+        <article class="metric-card metric-objects">
+          <h3>Objects</h3>
+          <p id="statObjects">-</p>
+        </article>
+        <article class="metric-card metric-triples">
+          <h3>Triples</h3>
+          <p id="statTriples">-</p>
+        </article>
+      </div>
+
+      <div class="forms-grid">
+        <form id="createForm" class="subcard">
+          <h3>创建数据库</h3>
+          <label>数据库名</label>
+          <input id="createDbName" type="text" placeholder="例如：watdiv500m" required />
+          <label class="file-field-label">数据文件</label>
+          <input id="createFileInput" class="hidden-file-input" type="file" accept=".nt,text/plain,application/n-triples" />
+          <div class="create-actions">
+            <button id="chooseFileBtn" type="button" class="btn btn-secondary">上传文件</button>
+            <button id="createSubmitBtn" type="submit" class="btn btn-primary">创建</button>
+          </div>
+          <p id="selectedFileName" class="file-name">未选择文件</p>
+        </form>
+
+        <form id="loadForm" class="subcard select-form">
+          <h3>加载数据库</h3>
+          <label>从现有数据库中选择</label>
+          <select id="existingDbSelect"></select>
+          <button id="loadSubmitBtn" type="submit" class="btn btn-primary">加载并切换</button>
+          <button id="deleteDbBtn" type="button" class="btn btn-danger">删除数据库</button>
+        </form>
+      </div>
+
+      <div class="subcard">
+        <h3>现有的数据库</h3>
+        <div id="allDatabaseStatsCards" class="snapshot-cards"></div>
+      </div>
+    </section>
+
+    <section class="panel card query-panel">
+      <div class="panel-head">
+        <h2>SPARQL 查询</h2>
+        <div class="query-actions">
+          <button id="runQueryBtn" class="btn btn-primary">运行查询</button>
+        </div>
+      </div>
+
+      <textarea id="queryInput" spellcheck="false" placeholder="请输入查询"></textarea>
+
+      <div class="stats-grid query-metrics">
+        <article class="metric-card">
+          <h3>耗时 (ms)</h3>
+          <p id="metricElapsed">-</p>
+        </article>
+        <article class="metric-card">
+          <h3>结果行数</h3>
+          <p id="metricRows">-</p>
+        </article>
+        <article class="metric-card">
+          <h3>结果列数</h3>
+          <p id="metricCols">-</p>
+        </article>
+        <article class="metric-card">
+          <h3>非空率</h3>
+          <p id="metricDensity">-</p>
+        </article>
+      </div>
+
+      <div class="result-head">
+        <h3>查询结果</h3>
+        <span class="pill" id="resultDbBadge">数据库：-</span>
+      </div>
+      <div id="resultMeta" class="result-meta"></div>
+
+      <div class="table-wrap">
+        <table id="resultTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <details class="subcard raw-panel">
+        <summary>查看原始 JSON</summary>
+        <pre id="rawJson"></pre>
+      </details>
+    </section>
+  </main>
+
+  <div id="progressModal" class="progress-modal hidden" aria-hidden="true">
+    <div class="progress-panel card">
+      <p class="eyebrow">APEX RDF Platform</p>
+      <h3 id="progressTitle">创建数据库中</h3>
+      <p id="progressStepText" class="progress-step">正在准备任务...</p>
+      <div class="progress-track">
+        <div id="progressBarFill" class="progress-fill" style="width: 0%;"></div>
+      </div>
+      <p id="progressPercentText" class="progress-percent">0%</p>
+      <button id="cancelCreateBtn" type="button" class="btn btn-secondary">取消创建</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>

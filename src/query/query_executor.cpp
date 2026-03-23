@@ -395,6 +395,118 @@ uint QueryExecutor::PrintResult(bool print) {
     return count;
 }
 
+QueryExecutor::ResultStreamStats QueryExecutor::StreamResultRows(
+    const std::function<void(const std::vector<std::string>&)>& on_row,
+    uint64_t max_rows) {
+    ResultStreamStats stats;
+    if (zero_result_ || executors_.empty())
+        return stats;
+
+    phmap::flat_hash_map<std::string, std::pair<uint, Position>> var_to_priority_position;
+    uint col_offset = 0;
+    std::vector<uint> col_offsets;
+    for (auto& executor : executors_) {
+        auto vars = executor->variable_order();
+        auto var_group_data = executor->MappingVariable(vars);
+        for (uint v_id = 0; v_id < vars.size(); ++v_id) {
+            auto [it, _] = var_to_priority_position.emplace(vars[v_id], var_group_data[v_id]);
+            it->second.first += col_offset;
+        }
+        col_offsets.push_back(col_offset);
+        col_offset += vars.size();
+    }
+
+    const auto& var_print_order = parser_.ProjectVariables();
+    std::vector<std::pair<uint, Position>> var_priority_position;
+    var_priority_position.reserve(var_print_order.size());
+    for (const auto& var : var_print_order)
+        var_priority_position.push_back(var_to_priority_position[var]);
+
+    std::vector<ResultGenerator::iterator> iters, begins, ends;
+    for (auto& executor : executors_) {
+        auto [begin, end] = executor->ResultsIter();
+        iters.push_back(begin);
+        begins.push_back(begin);
+        ends.push_back(end);
+    }
+
+    const uint num_executors = executors_.size();
+    std::vector<uint> result_row(col_offset);
+
+    uint limit = parser_.Limit();
+    uint count = 0;
+    const bool distinct =
+        parser_.project_modifier().modifier_type == SPARQLParser::ProjectModifier::Distinct;
+    std::set<std::vector<uint64_t>> unique_rows;
+    std::vector<uint64_t> dedup_key;
+    if (distinct)
+        dedup_key.resize(var_priority_position.size());
+    std::vector<std::string> row;
+    row.resize(var_priority_position.size());
+
+    while (true) {
+        for (uint i = 0; i < num_executors; ++i) {
+            const auto current_row = *(iters[i]);
+            std::copy(current_row.begin(), current_row.end(), result_row.begin() + col_offsets[i]);
+        }
+
+        bool should_emit = true;
+        if (distinct) {
+            for (size_t i = 0; i < var_priority_position.size(); ++i) {
+                const auto& [index, pos] = var_priority_position[i];
+                dedup_key[i] = (static_cast<uint64_t>(pos) << 32) | static_cast<uint64_t>(result_row[index]);
+            }
+            should_emit = unique_rows.insert(dedup_key).second;
+        }
+
+        if (should_emit) {
+            ++stats.row_count;
+
+            if (stats.returned_row_count < max_rows) {
+                for (size_t i = 0; i < var_priority_position.size(); ++i) {
+                    const auto& [index, pos] = var_priority_position[i];
+                    row[i] = index_->ID2String(result_row[index], pos);
+                }
+
+                if (on_row)
+                    on_row(row);
+
+                for (const auto& cell : row) {
+                    stats.total_chars += cell.size();
+                    if (!cell.empty())
+                        ++stats.non_empty_cells;
+                }
+                ++stats.returned_row_count;
+            } else {
+                stats.truncated = true;
+            }
+        }
+
+        if (++count >= limit)
+            break;
+
+        int idx = num_executors - 1;
+        while (idx >= 0 && ++iters[idx] == ends[idx]) {
+            iters[idx] = begins[idx];
+            if (--idx < 0)
+                goto stream_done;
+        }
+    }
+
+stream_done:
+    return stats;
+}
+
+std::vector<std::vector<std::string>> QueryExecutor::ResultRows() {
+    std::vector<std::vector<std::string>> rows;
+    StreamResultRows([&rows](const std::vector<std::string>& row) { rows.push_back(row); });
+    if (parser_.project_modifier().modifier_type == SPARQLParser::ProjectModifier::Distinct) {
+        std::set<std::vector<std::string>> unique_rows(rows.begin(), rows.end());
+        rows.assign(unique_rows.begin(), unique_rows.end());
+    }
+    return rows;
+}
+
 double QueryExecutor::preprocess_cost() {
     double time = 0;
     for (auto e : executors_)

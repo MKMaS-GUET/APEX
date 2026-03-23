@@ -1,8 +1,89 @@
-#include <codecvt>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 
 #include "parser/sparql_parser.hpp"
+
+namespace {
+void AppendUnicodeEscape(std::ostringstream& oss, uint16_t value) {
+    oss << "\\u" << std::uppercase << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(value)
+        << std::dec;
+}
+
+std::string EscapeUtf8ToUnicode(const std::string& input) {
+    std::ostringstream oss;
+    const size_t n = input.size();
+    size_t i = 0;
+
+    while (i < n) {
+        const unsigned char c0 = static_cast<unsigned char>(input[i]);
+        if (c0 < 0x80) {
+            oss << static_cast<char>(c0);
+            ++i;
+            continue;
+        }
+
+        uint32_t codepoint = 0;
+        size_t extra = 0;
+        if ((c0 & 0xE0) == 0xC0) {
+            codepoint = c0 & 0x1F;
+            extra = 1;
+        } else if ((c0 & 0xF0) == 0xE0) {
+            codepoint = c0 & 0x0F;
+            extra = 2;
+        } else if ((c0 & 0xF8) == 0xF0) {
+            codepoint = c0 & 0x07;
+            extra = 3;
+        } else {
+            AppendUnicodeEscape(oss, 0xFFFD);
+            ++i;
+            continue;
+        }
+
+        if (i + extra >= n) {
+            AppendUnicodeEscape(oss, 0xFFFD);
+            break;
+        }
+
+        bool valid = true;
+        for (size_t j = 1; j <= extra; ++j) {
+            const unsigned char cx = static_cast<unsigned char>(input[i + j]);
+            if ((cx & 0xC0) != 0x80) {
+                valid = false;
+                break;
+            }
+            codepoint = (codepoint << 6) | (cx & 0x3F);
+        }
+
+        i += extra + 1;
+        if (!valid) {
+            AppendUnicodeEscape(oss, 0xFFFD);
+            continue;
+        }
+
+        const bool overlong =
+            (extra == 1 && codepoint < 0x80) || (extra == 2 && codepoint < 0x800) || (extra == 3 && codepoint < 0x10000);
+        const bool surrogate = codepoint >= 0xD800 && codepoint <= 0xDFFF;
+        if (overlong || surrogate || codepoint > 0x10FFFF) {
+            AppendUnicodeEscape(oss, 0xFFFD);
+            continue;
+        }
+
+        if (codepoint <= 0xFFFF) {
+            AppendUnicodeEscape(oss, static_cast<uint16_t>(codepoint));
+            continue;
+        }
+
+        codepoint -= 0x10000;
+        const uint16_t high = static_cast<uint16_t>(0xD800 + (codepoint >> 10));
+        const uint16_t low = static_cast<uint16_t>(0xDC00 + (codepoint & 0x3FF));
+        AppendUnicodeEscape(oss, high);
+        AppendUnicodeEscape(oss, low);
+    }
+
+    return oss.str();
+}
+}  // namespace
 
 SPARQLParser::ParserException::ParserException(std::string message) : message(std::move(message)) {}
 
@@ -251,17 +332,7 @@ void SPARQLParser::ParseBasicGraphPattern(bool is_option) {
         auto token_t = sparql_lexer_.GetNextTokenType();
         std::string token_value = sparql_lexer_.GetCurrentTokenValue();
 
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-        std::wstring w_token_value = converter.from_bytes(token_value);
-
-        std::ostringstream oss;
-        for (wchar_t wc : w_token_value) {
-            if (wc < 0x80)
-                oss << (char)wc;
-            else
-                oss << "\\u" << std::uppercase << std::hex << std::setw(4) << std::setfill('0') << (int)wc;
-        }
-        token_value = oss.str();
+        token_value = EscapeUtf8ToUnicode(token_value);
 
         Term term;
         switch (token_t) {

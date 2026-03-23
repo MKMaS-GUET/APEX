@@ -179,7 +179,7 @@ void DictionaryBuilder::Build() {
 
     uint max_threads = 6;
 
-    menagement_data_ = MMap<ulong>(dict_path_ + "/menagement_data", 7 * 8);
+    menagement_data_ = MMap<ulong>(dict_path_ + "/menagement_data", 8 * 8);
 
     Init();
 
@@ -193,6 +193,7 @@ void DictionaryBuilder::Build() {
     menagement_data_[1] = predicates_.size();
     menagement_data_[2] = objects_.size();
     menagement_data_[3] = shared_.size();
+    menagement_data_[7] = triplet_loaded_;
 
     beg = std::chrono::high_resolution_clock::now();
     SaveDict(max_threads);
