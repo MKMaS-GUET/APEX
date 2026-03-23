@@ -1,4 +1,4 @@
-#include "apex.cpp"
+#include "exec/apex.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -13,6 +13,7 @@ constexpr std::string_view kHelpInfo =
     "Commands:\n"
     "  build      Build an RDF database.\n"
     "  query      Query an RDF database.\n"
+    "  server     Start APEX HTTP server.\n"
     "  train      Train on an database.\n"
     "  test       Test on an database.\n"
     "\n"
@@ -39,6 +40,17 @@ constexpr std::string_view kHelpInfo =
     "      -d, --database <PATH>   Specify the path of the database.\n"
     "      -f, --file <FILE>       Specify the file containing the queries.\n"
     "      -t, --threads <NUM>     Specify the number of threads (default: 8).\n"
+    "\n"
+    "  server\n"
+    "    Start APEX HTTP server.\n"
+    "\n"
+    "    Usage: apex server [OPTIONS]\n"
+    "\n"
+    "    Options:\n"
+    "      --host <HOST>            Bind host (default: 0.0.0.0).\n"
+    "      --port <PORT>            Bind port (default: 8080).\n"
+    "      --threads <NUM>          Query threads for API requests (default: 32).\n"
+    "      --max-upload-mb <NUM>    Max upload payload in MB (default: 20480).\n"
     "\n"
     "  train\n"
     "    Train variable order generator.\n"
@@ -86,11 +98,15 @@ int main(int argc, char** argv) {
     if (command == "-h" || command == "--help") {
         PrintHelpAndExit(0);
     }
-    if (command != "build" && command != "query" && command != "train" && command != "test") {
+    if (command != "build" && command != "query" && command != "server" && command != "train" &&
+        command != "test") {
         std::cout << kHelpInfo << std::endl;
         std::cerr << "error: the following arguments are required: command" << std::endl;
         return 0;
     }
+
+    if (command == "server")
+        return apex::Server(argc - 1, argv + 1);
 
     std::string db_path;
     std::string file_path;
@@ -146,17 +162,17 @@ int main(int argc, char** argv) {
         if (max_threads == 0)
             max_threads = 32;
         if (validate_args())
-            apex::Query(NormalizeDbPath(db_path), file_path, (uint)max_threads);
+            apex::Query(NormalizeDbPath(db_path), file_path, static_cast<unsigned int>(max_threads));
     } else if (command == "train") {
         if (max_threads == 0)
             max_threads = 32;
         if (validate_args())
-            apex::Train(NormalizeDbPath(db_path), file_path, (uint)max_threads);
+            apex::Train(NormalizeDbPath(db_path), file_path, static_cast<unsigned int>(max_threads));
     } else if (command == "test") {
         if (max_threads == 0)
             max_threads = 32;
         if (validate_args())
-            apex::Test(NormalizeDbPath(db_path), file_path, (uint)max_threads);
+            apex::Test(NormalizeDbPath(db_path), file_path, static_cast<unsigned int>(max_threads));
     }
     return 0;
 }

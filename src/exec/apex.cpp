@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "exec/apex.hpp"
 #include "index/index_builder.hpp"
 #include "index/index_retriever.hpp"
 #include "query/query_executor.hpp"
@@ -32,7 +33,7 @@ void Create(const std::string& db_name, const std::string& data_file) {
     std::cout << "create " << db_name << " takes " << diff.count() << " ms." << std::endl;
 }
 
-void Query(const std::string& db_path, const std::string& query_path, uint max_threads) {
+void Query(const std::string& db_path, const std::string& query_path, unsigned int max_threads) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         double traverse_time = 0;
@@ -81,7 +82,7 @@ void Query(const std::string& db_path, const std::string& query_path, uint max_t
     }
 }
 
-void Train(const std::string& db_path, const std::string& query_path, uint max_threads) {
+void Train(const std::string& db_path, const std::string& query_path, unsigned int max_threads) {
     if (db_path != "" and query_path != "") {
         bool print = false;
         std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path, print);
@@ -114,7 +115,7 @@ void Train(const std::string& db_path, const std::string& query_path, uint max_t
     }
 }
 
-void Test(const std::string& db_path, const std::string& query_path, uint max_threads) {
+void Test(const std::string& db_path, const std::string& query_path, unsigned int max_threads) {
     if (db_path != "" and query_path != "") {
         double total_time = 0;
         double gen_plan_time = 0;

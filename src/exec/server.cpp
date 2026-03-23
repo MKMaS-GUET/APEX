@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "exec/apex.hpp"
 #include "httplib.h"
 #include "index/index_builder.hpp"
 #include "index/index_retriever.hpp"
@@ -29,13 +30,22 @@ namespace fs = std::filesystem;
 
 namespace {
 constexpr std::string_view kDbArchiveDir = "./DB_DATA_ARCHIVE";
-constexpr std::string_view kUiDir = "./src/interface/web";
+constexpr std::string_view kUiDir = "./src/exec/web";
 constexpr std::string_view kDefaultHost = "0.0.0.0";
 constexpr int kDefaultPort = 8080;
 constexpr uint kDefaultQueryThreads = 32;
 constexpr uint kDefaultMaxUploadMB = 20480;  // 20GB
 constexpr uint64_t kNtValidationSampleLines = 100000;
 constexpr uint64_t kMaxQueryResultRows = 1000;
+constexpr std::string_view kServerHelpInfo =
+    "Usage: apex server [OPTIONS]\n"
+    "\n"
+    "Options:\n"
+    "  --host <HOST>            Bind host (default: 0.0.0.0).\n"
+    "  --port <PORT>            Bind port (default: 8080).\n"
+    "  --threads <NUM>          Query threads for API requests (default: 32).\n"
+    "  --max-upload-mb <NUM>    Max upload payload in MB (default: 20480).\n"
+    "  -h, --help               Show this help message and exit.\n";
 
 struct DatabaseStats {
     uint64_t subject_count = 0;
@@ -65,16 +75,16 @@ fs::path ResolveUiDir() {
     candidates.emplace_back(fs::path(kUiDir));
 
     const fs::path cwd = fs::current_path();
-    candidates.emplace_back(cwd / "src/interface/web");
-    candidates.emplace_back(cwd / "../src/interface/web");
+    candidates.emplace_back(cwd / "src/exec/web");
+    candidates.emplace_back(cwd / "../src/exec/web");
 
 #ifdef __linux__
     std::error_code ec;
     const fs::path exe_path = fs::read_symlink("/proc/self/exe", ec);
     if (!ec && !exe_path.empty()) {
         const fs::path exe_dir = exe_path.parent_path();
-        candidates.emplace_back(exe_dir / "../src/interface/web");
-        candidates.emplace_back(exe_dir / "../../src/interface/web");
+        candidates.emplace_back(exe_dir / "../src/exec/web");
+        candidates.emplace_back(exe_dir / "../../src/exec/web");
     }
 #endif
 
@@ -101,6 +111,14 @@ uint GetArgUInt(int argc, char** argv, const std::string& key, uint default_valu
             return static_cast<uint>(std::stoul(argv[i + 1]));
     }
     return default_value;
+}
+
+bool HasArg(int argc, char** argv, const std::string& key) {
+    for (int i = 1; i < argc; ++i) {
+        if (argv[i] == key)
+            return true;
+    }
+    return false;
 }
 
 void SetCorsHeaders(httplib::Response& res) {
@@ -823,7 +841,14 @@ class DatabaseManager {
 };
 }  // namespace
 
-int main(int argc, char** argv) {
+namespace apex {
+
+int Server(int argc, char** argv) {
+    if (HasArg(argc, argv, "-h") || HasArg(argc, argv, "--help")) {
+        std::cout << kServerHelpInfo << std::endl;
+        return 0;
+    }
+
     const std::string host = GetArgValue(argc, argv, "--host", std::string(kDefaultHost));
     const int port = static_cast<int>(GetArgUInt(argc, argv, "--port", kDefaultPort));
     const uint max_threads = GetArgUInt(argc, argv, "--threads", kDefaultQueryThreads);
@@ -1619,3 +1644,5 @@ int main(int argc, char** argv) {
     }
     return 0;
 }
+
+}  // namespace apex
