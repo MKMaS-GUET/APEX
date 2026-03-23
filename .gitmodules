@@ -4,3 +4,9 @@
 [submodule "extern/phmap"]
 	path = extern/phmap
 	url = https://github.com/greg7mdp/parallel-hashmap.git
+[submodule "extern/httplib"]
+	path = extern/httplib
+	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "extern/rapidjson"]
+	path = extern/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
