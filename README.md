@@ -22,7 +22,7 @@ It supports variable-wise parallel execution and dynamic variable ordering, and 
 git clone git@github.com:MKMaS-GUET/APEX.git
 ```
 
-2. Install dependicies
+2. Install dependencies
 
 ```
 git submodule update --init
